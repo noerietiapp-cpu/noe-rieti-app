@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>N.O.E. - Rieti 210 | Protezione Civile</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- Leaflet CSS (Mappa Interattiva) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        :root {
+            --pc-blue: #0d3b66;
+            --pc-yellow: #f4d35e;
+            --pc-accent: #e63946;
+        }
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .bg-pc-header { background: linear-gradient(135deg, #0d3b66 0%, #1d4e89 100%); color: white; }
+        .btn-pc { background-color: var(--pc-blue); color: white; }
+        .btn-pc:hover { background-color: #082642; color: white; }
+        .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .avatar-lg { width: 80px; height: 80px; object-fit: cover; border-radius: 50%; }
+        .vehicle-img { width: 100%; height: 180px; object-fit: cover; border-radius: 8px; }
+        .hydrant-img { width: 100%; height: 140px; object-fit: cover; border-radius: 8px; }
+        .receipt-img { width: 100%; height: 150px; object-fit: cover; border-radius: 8px; }
+        .badge-role { background-color: var(--pc-yellow); color: #333; font-weight: bold; }
+        .logo-noe-header { height: 45px; width: auto; margin-right: 12px; }
+        .logo-noe-main { height: 140px; width: auto; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto; }
+        .nav-pills .nav-link { cursor: pointer; color: #0d3b66; font-weight: 500; }
+        .nav-pills .nav-link.active { background-color: #0d3b66 !important; color: white !important; }
+        #map { height: 450px; width: 100%; border-radius: 12px; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar bg-pc-header sticky-top shadow-sm">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1 d-flex align-items-center text-white">
+                <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-header" onerror="this.style.display='none'">
+                <span>N.O.E. - Rieti (Cod. 210) - Cloud Sync</span>
+            </span>
+            <div id="userInfo" class="d-none align-items-center">
+                <span class="badge badge-role me-2" id="userRoleBadge"></span>
+                <button class="btn btn-outline-light btn-sm" onclick="logout()">Esci</button>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container my-4" id="appContainer">
+        <!-- Verrà popolato via JavaScript -->
+    </div>
+
+    <!-- Leaflet JS per Mappa -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Firebase SDKs & Core Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyC3Nu_m2eCSPre7XBOJbGXs0s6dU_N1E4",
+            authDomain: "noe-rieti-app.firebaseapp.com",
+            projectId: "noe-rieti-app",
+            storageBucket: "noe-rieti-app.appspot.com",
+            messagingSenderId: "681497158437",
+            appId: "1:681497158437:web:38b313c27c55c8afe7e00c"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        const ROLES_SINGLE = [
+            "Presidente (Legale Rappresentante)",
+            "Vice Presidente",
+            "Segreteria",
+            "Tesoriere",
+            "Responsabile Mezzi",
+            "Responsabile AIB",
+            "Responsabile App"
+        ];
+
+        const ROLES_CAN_EDIT_COURSES = [
+            "Presidente (Legale Rappresentante)",
+            "Vice Presidente",
+            "Segreteria",
+            "Responsabile AIB",
+            "Responsabile App"
+        ];
+
+        const SERVICE_TYPES = [
+            "Turno in Caserma",
+            "Pattugliamento AIB",
+            "Intervento AIB",
+            "Pattugliamento Idrogeologico",
+            "Intervento Idrogeologico",
+            "Supporto alla Popolazione",
+            "Manutenzione Caserma",
+            "Manutenzione Mezzi"
+        ];
+
+        const OPERATIVE_ROLES = [
+            "Caposquadra",
+            "Autista",
+            "Operatore",
+            "Soccorritore",
+            "4° Uomo (Affiancamento)"
+        ];
+
+        let users = [];
+        let loggedUser = JSON.parse(localStorage.getItem('noe_logged')) || null;
+        let vehicles = [];
+        let inventory = [];
+        let shifts = [];
+        let historyShifts = [];
+        let availabilities = [];
+        let waterPoints = [];
+        let refuels = [];
+
+        let activeTab = 'anagrafica';
+        let leafletMap = null;
+
+        window.loadCloudData = async function() {
+            try {
+                const usersSnap = await getDocs(collection(db, "users"));
+                users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const vehSnap = await getDocs(collection(db, "vehicles"));
+                vehicles = vehSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const invSnap = await getDocs(collection(db, "inventory"));
+                inventory = invSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const shiftSnap = await getDocs(collection(db, "shifts"));
+                shifts = shiftSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const histSnap = await getDocs(collection(db, "historyShifts"));
+                historyShifts = histSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const dispSnap = await getDocs(collection(db, "availabilities"));
+                availabilities = dispSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const wpSnap = await getDocs(collection(db, "waterPoints"));
+                waterPoints = wpSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const refSnap = await getDocs(collection(db, "refuels"));
+                refuels = refSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                init();
+            } catch (err) {
+                console.error("Errore di connessione a Firestore: ", err);
+                alert("Errore di connessione al database cloud. Verifica la connessione.");
+            }
+        };
+
+        window.init = function() {
+            if (!loggedUser) {
+                renderLogin();
+            } else {
+                document.getElementById('userInfo').classList.remove('d-none');
+                document.getElementById('userInfo').classList.add('d-flex');
+                document.getElementById('userRoleBadge').innerText = loggedUser.ruolo;
+                renderMainView();
+            }
+        }
+
+        window.renderLogin = function() {
+            document.getElementById('appContainer').innerHTML = `
+                <div class="row justify-content-center">
+                    <div class="col-md-5">
+                        <div class="card p-4 text-center">
+                            <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-main" onerror="this.style.display='none'">
+                            <h3 class="mt-2 mb-1 text-primary fw-bold">N.O.E. - Rieti 210</h3>
+                            <p class="text-muted mb-4">Nucleo Operativo Emergenza - Gestione Cloud</p>
+                            
+                            <form onsubmit="handleLogin(event)">
+                                <div class="mb-3 text-start">
+                                    <label class="form-label">Email o Codice Fiscale</label>
+                                    <input type="text" id="loginId" class="form-control" required>
+                                </div>
+                                <div class="mb-3 text-start">
+                                    <label class="form-label">Password</label>
+                                    <input type="password" id="loginPass" class="form-control" required>
+                                </div>
+                                <button type="submit" class="btn btn-pc w-100 mb-3 fw-bold">Accedi</button>
+                            </form>
+                            <hr>
+                            <button class="btn btn-outline-secondary w-100" onclick="renderRegister()">Non hai un account? Registrati</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.renderRegister = function() {
+            let optionsRoles = `<option value="Volontario">Volontario</option>`;
+            ROLES_SINGLE.forEach(r => {
+                const taken = users.some(u => u.ruolo === r);
+                optionsRoles += `<option value="${r}" ${taken ? 'disabled' : ''}>${r} ${taken ? '(Occupato)' : ''}</option>`;
+            });
+
+            document.getElementById('appContainer').innerHTML = `
+                <div class="row justify-content-center">
+                    <div class="col-md-7">
+                        <div class="card p-4">
+                            <div class="text-center mb-3">
+                                <img src="logo bianco.png" alt="Logo NOE Rieti" style="height: 80px; width: auto;" onerror="this.style.display='none'">
+                            </div>
+                            <h4 class="mb-3 text-primary fw-bold text-center">Registrazione Volontario</h4>
+                            <form onsubmit="handleRegister(event)">
+                                <div class="mb-3">
+                                    <label class="form-label font-weight-bold">Foto Profilo (Obbligatoria)*</label>
+                                    <input type="file" id="regFoto" accept="image/*" class="form-control" required>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3"><label>Nome*</label><input type="text" id="regNome" class="form-control" required></div>
+                                    <div class="col-md-6 mb-3"><label>Cognome*</label><input type="text" id="regCognome" class="form-control" required></div>
+                                </div>
+                                <div class="mb-3"><label>Ruolo Richiesto*</label><select id="regRuolo" class="form-select" required>${optionsRoles}</select></div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3"><label>Telefono*</label><input type="tel" id="regTel" class="form-control" required></div>
+                                    <div class="col-md-6 mb-3"><label>Email*</label><input type="email" id="regEmail" class="form-control" required></div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3"><label>Codice Fiscale*</label><input type="text" id="regCF" class="form-control" required></div>
+                                    <div class="col-md-3 mb-3"><label>Gruppo Sanguigno</label><input type="text" id="regSangue" class="form-control" placeholder="es. 0+"></div>
+                                    <div class="col-md-3 mb-3"><label>Taglia Abbigliamento</label><input type="text" id="regTaglia" class="form-control" placeholder="es. L"></div>
+                                </div>
+                                <div class="mb-3"><label>Password di accesso*</label><input type="password" id="regPass" class="form-control" required></div>
+                                <button type="submit" class="btn btn-success w-100 fw-bold">Completa Registrazione</button>
+                                <button type="button" class="btn btn-link w-100 mt-2 text-decoration-none" onclick="renderLogin()">Torna al Login</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.handleRegister = async function(e) {
+            e.preventDefault();
+            const fotoFile = document.getElementById('regFoto').files[0];
+            const reader = new FileReader();
+
+            reader.onloadend = async function() {
+                const newUser = {
+                    nome: document.getElementById('regNome').value,
+                    cognome: document.getElementById('regCognome').value,
+                    ruolo: document.getElementById('regRuolo').value,
+                    tel: document.getElementById('regTel').value,
+                    email: document.getElementById('regEmail').value,
+                    cf: document.getElementById('regCF').value,
+                    sangue: document.getElementById('regSangue').value,
+                    taglia: document.getElementById('regTaglia').value,
+                    corsi: "",
+                    pass: document.getElementById('regPass').value,
+                    foto: reader.result
+                };
+
+                try {
+                    await addDoc(collection(db, "users"), newUser);
+                    alert('Registrazione completata! Ora puoi accedere.');
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore salvataggio utente:", err);
+                    alert("Errore durante la registrazione.");
+                }
+            };
+
+            if (fotoFile) {
+                reader.readAsDataURL(fotoFile);
+            }
+        }
+
+        window.handleLogin = function(e) {
+            e.preventDefault();
+            const id = document.getElementById('loginId').value.trim().toLowerCase();
+            const pass = document.getElementById('loginPass').value;
+
+            const found = users.find(u => (u.email.toLowerCase() === id || u.cf.toLowerCase() === id) && u.pass === pass);
+            if (found) {
+                loggedUser = found;
+                localStorage.setItem('noe_logged', JSON.stringify(loggedUser));
+                init();
+            } else {
+                alert('Credenziali non valide!');
+            }
+        }
+
+        window.logout = function() {
+            localStorage.removeItem('noe_logged');
+            loggedUser = null;
+            document.getElementById('userInfo').classList.add('d-none');
+            renderLogin();
+        }
+
+        window.switchTab = function(tab) {
+            activeTab = tab;
+            renderMainView();
+        }
+
+        window.renderMainView = function() {
+            document.getElementById('appContainer').innerHTML = `
+                <div class="row text-center mb-4">
+                    <div class="col-md-12">
+                        <h2 class="fw-bold mb-1">Benvenuto, ${loggedUser.nome} ${loggedUser.cognome}</h2>
+                        <p class="text-muted">Ruolo Attivo: <strong>${loggedUser.ruolo}</strong></p>
+                    </div>
+                </div>
+
+                <ul class="nav nav-pills nav-fill mb-4 bg-white p-2 rounded shadow-sm border flex-wrap gap-1">
+                    <li class="nav-item">
+                        <a class="nav-link ${activeTab === 'anagrafica' ? 'active' : ''}" onclick="switchTab('anagrafica')">
+                            <i class="bi bi-people-fill me-1"></i> Volontari
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link ${activeTab === 'turni' ? 'active' : ''}" onclick="switchTab('turni')">
+                            <i class="bi bi-calendar-event me-1"></i> Turni & Servizi
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link ${activeTab === 'disponibilita' ? 'active' : ''}" onclick="switchTab('disponibilita')">
+                            <i class="bi bi-calendar-check me-1"></i> Disponibilità
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link ${activeTab === 'storico' ? 'active' : ''}" onclick="switchTab('storico')">
+                            <i class="bi bi-clock-history me-1"></i> Storico Servizi
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link ${activeTab === 'mezzi' ? 'active' : ''}" onclick="switchTab('mezzi')">
+                            <i class="bi bi-truck me-1"></i> Mezzi & Scadenze
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link ${activeTab === 'rifornimenti' ? 'active' : ''}" onclick="switchTab('rifornimenti')">
+                            <i class="bi bi-fuel-pump me-1"></i> Rifornimenti
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link ${activeTab === 'mappa' ? 'active' : ''}" onclick="switchTab('mappa')">
+                            <i class="bi bi-geo-alt-fill me-1"></i> Mappa Idrica Rieti
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link ${activeTab === 'magazzino' ? 'active' : ''}" onclick="switchTab('magazzino')">
+                            <i class="bi bi-box-seam me-1"></i> Magazzino
+                        </a>
+                    </li>
+                </ul>
+
+                <div id="tabContent"></div>
+            `;
+
+            if (activeTab === 'anagrafica') renderAnagrafica();
+            else if (activeTab === 'turni') renderTurni();
+            else if (activeTab === 'disponibilita') renderDisponibilita();
+            else if (activeTab === 'storico') renderStorico();
+            else if (activeTab === 'mezzi') renderMezzi();
+            else if (activeTab === 'rifornimenti') renderRifornimenti();
+            else if (activeTab === 'mappa') renderMappa();
+            else if (activeTab === 'magazzino') renderMagazzino();
+        }
+
+        window.renderAnagrafica = function() {
+            const canManageCourses = ROLES_CAN_EDIT_COURSES.includes(loggedUser.ruolo);
+            const isAppAdmin = loggedUser.ruolo === "Responsabile App";
+
+            let usersListHTML = users.map((u, index) => {
+                let rolesDropdown = '';
+                if (isAppAdmin) {
+                    rolesDropdown = `
+                        <div class="mt-2 pt-2 border-top">
+                            <label class="small fw-bold text-danger">Gestione Ruolo (Riservato Responsabile App):</label>
+                            <select class="form-select form-select-sm mt-1" onchange="changeUserRole('${u.id}', this.value)">
+                                <option value="Volontario" ${u.ruolo === 'Volontario' ? 'selected' : ''}>Volontario</option>
+                                ${ROLES_SINGLE.map(r => `<option value="${r}" ${u.ruolo === r ? 'selected' : ''}>${r}</option>`).join('')}
+                            </select>
+                        </div>
+                    `;
+                }
+
+                return `
+                    <div class="col-md-6 mb-3">
+                        <div class="card p-3 h-100">
+                            <div class="d-flex align-items-center mb-2">
+                                <img src="${u.foto}" class="avatar-lg me-3" alt="Foto Profilo">
+                                <div>
+                                    <h5 class="mb-0 fw-bold">${u.nome} ${u.cognome}</h5>
+                                    <span class="badge badge-role mt-1">${u.ruolo}</span>
+                                </div>
+                            </div>
+                            <small class="text-muted"><strong>Tel:</strong> ${u.tel} | <strong>Email:</strong> ${u.email}</small>
+                            <small class="text-muted"><strong>CF:</strong> ${u.cf} | <strong>Sangue:</strong> ${u.sangue || '-'} | <strong>Taglia:</strong> ${u.taglia || '-'}</small>
+                            
+                            <div class="mt-2 pt-2 border-top">
+                                <strong>Corsi Effettuati:</strong>
+                                ${canManageCourses ? `
+                                    <div class="input-group input-group-sm mt-1">
+                                        <input type="text" id="courseInput_${index}" class="form-control" value="${u.corsi || ''}" placeholder="AIB, Primo Soccorso, ecc.">
+                                        <button class="btn btn-outline-primary" onclick="saveCourses('${u.id}', ${index})">Salva</button>
+                                    </div>
+                                ` : `
+                                    <p class="mb-0 text-secondary">${u.corsi ? u.corsi : '<em>Nessun corso inserito</em>'}</p>
+                                `}
+                            </div>
+                            ${rolesDropdown}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('tabContent').innerHTML = `
+                <h4 class="fw-bold mb-3">Anagrafica Volontari (${users.length})</h4>
+                <div class="row">${usersListHTML}</div>
+            `;
+        }
+
+        window.changeUserRole = async function(userId, newRole) {
+            try {
+                await updateDoc(doc(db, "users", userId), { ruolo: newRole });
+                alert('Ruolo aggiornato con successo!');
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore ruolo:", err);
+            }
+        }
+
+        window.saveCourses = async function(userId, index) {
+            const inputVal = document.getElementById(`courseInput_${index}`).value;
+            try {
+                await updateDoc(doc(db, "users", userId), { corsi: inputVal });
+                alert('Corsi aggiornati!');
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore corsi:", err);
+            }
+        }
+
+        // --- SEZIONE TURNI & SERVIZI ---
+        window.renderTurni = function() {
+            let shiftsHTML = shifts.map((s, i) => `
+                <div class="col-md-6 mb-3">
+                    <div class="card p-3 border-start border-4 border-primary h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="fw-bold text-primary mb-0">${s.tipoServizio}</h5>
+                                <span class="badge bg-success">In Corso</span>
+                            </div>
+                            <p class="mb-1"><strong>Data / Ora:</strong> ${s.data} - Inizio: ${s.oraInizio} (Presunta fine: ${s.oraFine})</p>
+                            <p class="mb-1"><strong>Note / Luogo:</strong> ${s.note || 'Nessuna nota'}</p>
+                            <p class="mb-1"><strong>Mezzo usufruito:</strong> ${s.mezzoUsato || 'Nessun mezzo assegnato'}</p>
+                            <hr class="my-2">
+                            <strong>Squadra Operativa (${s.volontariDettaglio.length}):</strong>
+                            <ul class="list-unstyled mt-1 small mb-2">
+                                ${s.volontariDettaglio.map(v => `
+                                    <li><i class="bi bi-person-badge me-1"></i><strong>${v.nome}:</strong> ${v.ruoloOperativo} ${v.mansioniSpuntate ? '(Mansioni Verificate)' : ''}</li>
+                                `).join('')}
+                            </ul>
+                        </div>
+                        <button class="btn btn-outline-danger btn-sm mt-3 w-100 fw-bold" onclick="closeShiftModal('${s.id}', ${i})">
+                            <i class="bi bi-check2-square me-1"></i> Chiudi e Salva in Storico
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            let optionsTipologia = SERVICE_TYPES.map(st => `<option value="${st}">${st}</option>`).join('');
+            let optionsMezzi = `<option value="Nessun Mezzo">Nessun Mezzo</option>` + vehicles.map(v => `<option value="${v.modello} (${v.targa})">${v.modello} [${v.targa}] - Km: ${v.km}</option>`).join('');
+
+            let usersChecklistHTML = users.map((u, idx) => `
+                <div class="border p-2 rounded mb-2 bg-white">
+                    <div class="form-check">
+                        <input class="form-check-input shift-vol-cb" type="checkbox" id="vol_cb_${idx}" value="${u.nome} ${u.cognome}" onchange="toggleVolOptions(${idx})">
+                        <label class="form-check-label fw-bold" for="vol_cb_${idx}">
+                            ${u.nome} ${u.cognome} <small class="text-muted">(${u.ruolo})</small>
+                        </label>
+                    </div>
+                    <div id="vol_opts_${idx}" class="mt-2 ps-3 d-none border-start border-3 border-info">
+                        <label class="form-label small fw-bold mb-1">Ruolo Operativo Svolto nel Servizio:*</label>
+                        <select id="vol_ruolo_${idx}" class="form-select form-select-sm mb-2" onchange="toggleChecklistMansione(${idx})">
+                            ${OPERATIVE_ROLES.map(r => `<option value="${r}">${r}</option>`).join('')}
+                        </select>
+                        <div id="checklist_cs_${idx}" class="form-check small bg-warning bg-opacity-10 p-2 rounded mb-2">
+                            <input class="form-check-input" type="checkbox" id="chk_cs_${idx}">
+                            <label class="form-check-label fw-bold text-dark" for="chk_cs_${idx}">
+                                Mansione Caposquadra: Controllato DPI squadra, stato radio ed attrezzatura.
+                            </label>
+                        </div>
+                        <div id="checklist_aut_${idx}" class="form-check small bg-info bg-opacity-10 p-2 rounded mb-2 d-none">
+                            <input class="form-check-input" type="checkbox" id="chk_aut_${idx}">
+                            <label class="form-check-label fw-bold text-dark" for="chk_aut_${idx}">
+                                Mansione Autista: Controllati livelli liquidi mezzo e stato generale veicolo.
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('tabContent').innerHTML = `
+                <div class="card p-4 mb-4">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-plus me-2"></i>Apertura Nuovo Turno / Servizio</h4>
+                    <form onsubmit="addShift(event)">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Tipo di Servizio*</label>
+                                <select id="shiftTipo" class="form-select" required>
+                                    ${optionsTipologia}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Data Servizio*</label>
+                                <input type="date" id="shiftData" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Ora Inizio*</label>
+                                <input type="time" id="shiftOraInizio" class="form-control" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Ora Fine Presunta*</label>
+                                <input type="time" id="shiftOraFine" class="form-control" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Mezzo Assegnato</label>
+                                <select id="shiftMezzo" class="form-select">
+                                    ${optionsMezzi}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Seleziona Volontari e Assegna Ruoli/Mansioni:*</label>
+                            <div class="p-3 border rounded bg-light" style="max-height: 300px; overflow-y: auto;">
+                                ${usersChecklistHTML}
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Note / Ordini di Servizio</label>
+                            <input type="text" id="shiftNote" class="form-control" placeholder="Dettagli ed eventuali note operative">
+                        </div>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva e Apri Turno</button>
+                    </form>
+                </div>
+
+                <h4 class="fw-bold mb-3">Servizi in Corso (${shifts.length})</h4>
+                <div class="row">${shifts.length > 0 ? shiftsHTML : '<div class="col-12 text-muted">Nessun servizio attualmente in corso.</div>'}</div>
+            `;
+
+            document.getElementById('shiftData').value = new Date().toISOString().split('T')[0];
+        }
+
+        window.toggleVolOptions = function(idx) {
+            const cb = document.getElementById(`vol_cb_${idx}`);
+            const opts = document.getElementById(`vol_opts_${idx}`);
+            if(cb.checked) {
+                opts.classList.remove('d-none');
+                toggleChecklistMansione(idx);
+            } else {
+                opts.classList.add('d-none');
+            }
+        }
+
+        window.toggleChecklistMansione = function(idx) {
+            const role = document.getElementById(`vol_ruolo_${idx}`).value;
+            const chkCS = document.getElementById(`checklist_cs_${idx}`);
+            const chkAut = document.getElementById(`checklist_aut_${idx}`);
+
+            chkCS.classList.add('d-none');
+            chkAut.classList.add('d-none');
+
+            if (role === 'Caposquadra') {
+                chkCS.classList.remove('d-none');
+            } else if (role === 'Autista') {
+                chkAut.classList.remove('d-none');
+            }
+        }
+
+        window.addShift = async function(e) {
+            e.preventDefault();
+            let selectedVols = [];
+
+            users.forEach((u, idx) => {
+                const cb = document.getElementById(`vol_cb_${idx}`);
+                if (cb && cb.checked) {
+                    const rOp = document.getElementById(`vol_ruolo_${idx}`).value;
+                    let mansioniChecked = false;
+                    if (rOp === 'Caposquadra') {
+                        mansioniChecked = document.getElementById(`chk_cs_${idx}`).checked;
+                        if (!mansioniChecked) {
+                            alert(`Il caposquadra ${u.nome} ${u.cognome} deve spuntare la mansione obbligatoria di controllo DPI/Radio!`);
+                            throw new Error("Mansione obbligatoria mancante");
+                        }
+                    } else if (rOp === 'Autista') {
+                        mansioniChecked = document.getElementById(`chk_aut_${idx}`).checked;
+                        if (!mansioniChecked) {
+                            alert(`L'autista ${u.nome} ${u.cognome} deve spuntare la mansione obbligatoria di controllo liquidi/mezzo!`);
+                            throw new Error("Mansione obbligatoria mancante");
+                        }
+                    }
+
+                    selectedVols.push({
+                        nome: `${u.nome} ${u.cognome}`,
+                        ruoloOperativo: rOp,
+                        mansioniSpuntate: mansioniChecked
+                    });
+                }
+            });
+
+            if(selectedVols.length === 0) {
+                alert("Seleziona almeno un volontario per il turno!");
+                return;
+            }
+
+            const newShift = {
+                tipoServizio: document.getElementById('shiftTipo').value,
+                data: document.getElementById('shiftData').value,
+                oraInizio: document.getElementById('shiftOraInizio').value,
+                oraFine: document.getElementById('shiftOraFine').value,
+                mezzoUsato: document.getElementById('shiftMezzo').value,
+                note: document.getElementById('shiftNote').value,
+                volontariDettaglio: selectedVols
+            };
+
+            try {
+                await addDoc(collection(db, "shifts"), newShift);
+                alert("Turno salvato ed aperto con successo!");
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore turno:", err);
+            }
+        }
+
+        window.closeShiftModal = async function(shiftId, index) {
+            const shiftToClose = shifts[index];
+            const oraFineReale = prompt("Inserisci l'ora di fine effettiva del servizio (HH:MM):", shiftToClose.oraFine) || shiftToClose.oraFine;
+            const kmPercorsi = prompt("Inserisci i KM percorsi durante il servizio:", "0");
+
+            const completedShift = {
+                ...shiftToClose,
+                oraFine: oraFineReale,
+                kmPercorsi: kmPercorsi || "0",
+                dataChiusura: new Date().toLocaleDateString('it-IT')
+            };
+
+            try {
+                await addDoc(collection(db, "historyShifts"), completedShift);
+                await deleteDoc(doc(db, "shifts", shiftId));
+                alert("Servizio chiuso e registrato nello Storico!");
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore chiusura:", err);
+            }
+        }
+
+        // --- SEZIONE DISPONIBILITÀ ---
+        window.renderDisponibilita = function() {
+            let listHTML = availabilities.map((a, i) => {
+                const isMine = a.userEmail === loggedUser.email;
+                return `
+                    <div class="col-md-4 mb-3">
+                        <div class="card p-3 border-start border-4 ${isMine ? 'border-success bg-light' : 'border-info'} h-100">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <h6 class="fw-bold mb-0 text-primary">${a.userName}</h6>
+                                ${isMine ? '<span class="badge bg-success">Tua Disponibilità</span>' : ''}
+                            </div>
+                            <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
+                            <p class="mb-1"><strong>Fascia Oraria:</strong> ${a.oraInizio} - ${a.oraFine}</p>
+                            <p class="mb-1 small text-muted"><strong>Note:</strong> ${a.note || 'Nessuna'}</p>
+                            ${isMine ? `
+                                <div class="text-end mt-2">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteAvailability('${a.id}')">
+                                        <i class="bi bi-trash"></i> Elimina
+                                    </button>
+                                </div>
+                            ` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('tabContent').innerHTML = `
+                <div class="card p-4 mb-4">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-check me-2"></i>Inserisci la tua Disponibilità</h4>
+                    <form onsubmit="addAvailability(event)">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Data Disponibilità*</label>
+                                <input type="date" id="dispData" class="form-control" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Ora Inizio*</label>
+                                <input type="time" id="dispOraInizio" class="form-control" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Ora Fine*</label>
+                                <input type="time" id="dispOraFine" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Note / Eventuali limitazioni</label>
+                            <input type="text" id="dispNote" class="form-control" placeholder="es. Disponibile solo per servizi AIB">
+                        </div>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-plus-circle me-1"></i>Aggiungi Disponibilità</button>
+                    </form>
+                </div>
+
+                <h4 class="fw-bold mb-3">Calendario Disponibilità Operatori (${availabilities.length})</h4>
+                <div class="row">${listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessuna disponibilità comunicata.</div>'}</div>
+            `;
+
+            document.getElementById('dispData').value = new Date().toISOString().split('T')[0];
+        }
+
+        window.addAvailability = async function(e) {
+            e.preventDefault();
+            const newDisp = {
+                userEmail: loggedUser.email,
+                userName: `${loggedUser.nome} ${loggedUser.cognome}`,
+                data: document.getElementById('dispData').value,
+                oraInizio: document.getElementById('dispOraInizio').value,
+                oraFine: document.getElementById('dispOraFine').value,
+                note: document.getElementById('dispNote').value
+            };
+
+            try {
+                await addDoc(collection(db, "availabilities"), newDisp);
+                alert('Disponibilità inserita con successo!');
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore disponibilità:", err);
+            }
+        }
+
+        window.deleteAvailability = async function(id) {
+            if(confirm("Sei sicuro di voler rimuovere questa disponibilità?")) {
+                try {
+                    await deleteDoc(doc(db, "availabilities", id));
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore eliminazione:", err);
+                }
+            }
+        }
+
+        // --- SEZIONE STORICO SERVIZI ---
+        window.renderStorico = function() {
+            let historyListHTML = historyShifts.map((hs, i) => `
+                <div class="col-md-6 mb-3">
+                    <div class="card p-3 border-start border-4 border-secondary h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="fw-bold text-dark mb-0">${hs.tipoServizio}</h5>
+                            <span class="badge bg-secondary">Concluso</span>
+                        </div>
+                        <p class="mb-1"><strong>Giorno:</strong> ${hs.data}</p>
+                        <p class="mb-1"><strong>Ora Inizio / Fine:</strong> ${hs.oraInizio} - ${hs.oraFine}</p>
+                        <p class="mb-1"><strong>Mezzi Usati:</strong> ${hs.mezzoUsato || 'Nessuno'}</p>
+                        <p class="mb-1"><strong>KM Percorsi:</strong> ${hs.kmPercorsi} km</p>
+                        <p class="mb-1"><strong>Note:</strong> ${hs.note || 'Nessuna'}</p>
+                        <hr class="my-2">
+                        <small class="fw-bold">Squadra Operativa:</small>
+                        <ul class="list-unstyled small mt-1 mb-0">
+                            ${hs.volontariDettaglio ? hs.volontariDettaglio.map(v => `<li>• ${v.nome} (${v.ruoloOperativo})</li>`).join('') : ''}
+                        </ul>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('tabContent').innerHTML = `
+                <h4 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Storico Servizi Svolti (${historyShifts.length})</h4>
+                <div class="row">${historyListHTML.length > 0 ? historyListHTML : '<div class="col-12 text-muted">Nessun servizio archiviato nello storico.</div>'}</div>
+            `;
+        }
+
+        // --- SEZIONE MEZZI ---
+        window.renderMezzi = function() {
+            let list = vehicles.map((v, i) => `
+                <div class="col-md-6 mb-3">
+                    <div class="card p-3 h-100">
+                        ${v.foto ? `<img src="${v.foto}" class="vehicle-img mb-3" alt="Foto Mezzo">` : ''}
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="fw-bold mb-0">${v.modello}</h5>
+                            <span class="badge bg-secondary">${v.targa}</span>
+                        </div>
+                        <p class="text-muted small mb-2">Tipologia: <strong>${v.tipo}</strong> | Km attuali: <strong>${v.km} km</strong></p>
+                        <div class="p-2 bg-light rounded small">
+                            <div><strong>Scadenza Revisione:</strong> ${v.revisione}</div>
+                            <div><strong>Scadenza Assicurazione:</strong> ${v.assicurazione}</div>
+                            <div><strong>Scadenza Bollo:</strong> ${v.bollo}</div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('tabContent').innerHTML = `
+                <div class="card p-4 mb-4">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-plus-circle me-2"></i>Inserimento Nuovo Mezzo</h4>
+                    <form onsubmit="addVehicle(event)">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Foto del Mezzo (Obbligatoria)*</label>
+                            <input type="file" id="vFoto" accept="image/*" class="form-control" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label>Modello Mezzo*</label><input type="text" id="vModello" class="form-control" placeholder="es. Land Rover Defender" required></div>
+                            <div class="col-md-6 mb-3"><label>Targa*</label><input type="text" id="vTarga" class="form-control" placeholder="es. AB123CD" required></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label>Tipologia Mezzo*</label><input type="text" id="vTipo" class="form-control" placeholder="es. Fuoristrada AIB" required></div>
+                            <div class="col-md-6 mb-3"><label>Chilometri Attuali*</label><input type="number" id="vKm" class="form-control" required></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3"><label>Scadenza Revisione*</label><input type="date" id="vRevisione" class="form-control" required></div>
+                            <div class="col-md-4 mb-3"><label>Scadenza Assicurazione*</label><input type="date" id="vAssicurazione" class="form-control" required></div>
+                            <div class="col-md-4 mb-3"><label>Scadenza Bollo*</label><input type="date" id="vBollo" class="form-control" required></div>
+                        </div>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva Mezzo</button>
+                    </form>
+                </div>
+
+                <h4 class="fw-bold mb-3">Parco Mezzi Associazione (${vehicles.length})</h4>
+                <div class="row">${list.length > 0 ? list : '<div class="col-12 text-muted">Nessun mezzo inserito.</div>'}</div>
+            `;
+        }
+
+        window.addVehicle = async function(e) {
+            e.preventDefault();
+            const fotoFile = document.getElementById('vFoto').files[0];
+            const reader = new FileReader();
+
+            reader.onloadend = async function() {
+                const newVeh = {
+                    modello: document.getElementById('vModello').value,
+                    targa: document.getElementById('vTarga').value,
+                    tipo: document.getElementById('vTipo').value,
+                    km: parseInt(document.getElementById('vKm').value, 10),
+                    revisione: document.getElementById('vRevisione').value,
+                    assicurazione: document.getElementById('vAssicurazione').value,
+                    bollo: document.getElementById('vBollo').value,
+                    foto: reader.result
+                };
+
+                try {
+                    await addDoc(collection(db, "vehicles"), newVeh);
+                    alert('Mezzo salvato correttamente!');
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore mezzo:", err);
+                }
+            };
+
+            if (fotoFile) {
+                reader.readAsDataURL(fotoFile);
+            }
+        }
+
+        // --- SEZIONE RIFORNIMENTI MEZZI ---
+        window.renderRifornimenti = function() {
+            const isManager = ROLES_CAN_EDIT_COURSES.includes(loggedUser.ruolo) || loggedUser.ruolo === "Responsabile Mezzi" || loggedUser.ruolo === "Tesoriere";
+
+            let optionsMezzi = vehicles.map(v => `<option value="${v.modello} (${v.targa})">${v.modello} [${v.targa}]</option>`).join('');
+
+            let historyRefuelsHTML = refuels.map(r => `
+                <div class="col-md-4 mb-3">
+                    <div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            ${r.fotoScontrino ? `<img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Scontrino Rifornimento">` : ''}
+                            <h5 class="fw-bold mb-1">${r.mezzo}</h5>
+                            <span class="badge bg-warning text-dark mb-2">€ ${r.importo} (${r.litri} Litri)</span>
+                            <p class="small text-muted mb-1"><strong>Data / Ora:</strong> ${r.data} - ${r.ora}</p>
+                            <p class="small text-muted mb-0"><strong>Registrato da:</strong> ${r.volontario}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('tabContent').innerHTML = `
+                <div class="card p-4 mb-4">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-fuel-pump me-2"></i>Registra Nuovo Rifornimento</h4>
+                    <form onsubmit="addRefuel(event)">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Foto dello Scontrino (Obbligatoria)*</label>
+                            <input type="file" id="refFoto" accept="image/*" class="form-control" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Mezzo Rifornito*</label>
+                                <select id="refMezzo" class="form-select" required>
+                                    <option value="">Seleziona mezzo...</option>
+                                    ${optionsMezzi}
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Data Rifornimento*</label>
+                                <input type="date" id="refData" class="form-control" required>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Ora Rifornimento*</label>
+                                <input type="time" id="refOra" class="form-control" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Litri Inseriti*</label>
+                                <input type="number" step="0.01" id="refLitri" class="form-control" placeholder="es. 45.5" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">Importo Totale (€)*</label>
+                                <input type="number" step="0.01" id="refImporto" class="form-control" placeholder="es. 75.00" required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva Rifornimento</button>
+                    </form>
+                </div>
+
+                ${isManager ? `
+                    <h4 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Storico Rifornimenti Mezzi (Riservato Responsabili) (${refuels.length})</h4>
+                    <div class="row">${historyRefuelsHTML.length > 0 ? historyRefuelsHTML : '<div class="col-12 text-muted">Nessun rifornimento registrato nello storico.</div>'}</div>
+                ` : `
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle me-2"></i>Puoi inserire liberamente i rifornimenti dei mezzi tramite il modulo sopra. Lo storico completo è riservato ai responsabili dell'associazione.
+                    </div>
+                `}
+            `;
+
+            document.getElementById('refData').value = new Date().toISOString().split('T')[0];
+        }
+
+        window.addRefuel = async function(e) {
+            e.preventDefault();
+            const fotoFile = document.getElementById('refFoto').files[0];
+            const reader = new FileReader();
+
+            reader.onloadend = async function() {
+                const newRef = {
+                    mezzo: document.getElementById('refMezzo').value,
+                    data: document.getElementById('refData').value,
+                    ora: document.getElementById('refOra').value,
+                    litri: parseFloat(document.getElementById('refLitri').value),
+                    importo: parseFloat(document.getElementById('refImporto').value),
+                    volontario: `${loggedUser.nome} ${loggedUser.cognome}`,
+                    fotoScontrino: reader.result
+                };
+
+                try {
+                    await addDoc(collection(db, "refuels"), newRef);
+                    alert('Rifornimento registrato correttamente nel cloud!');
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore rifornimento:", err);
+                    alert("Errore durante il salvataggio del rifornimento.");
+                }
+            };
+
+            if (fotoFile) {
+                reader.readAsDataURL(fotoFile);
+            }
+        }
+
+        // --- SEZIONE MAPPA IDRICA CON MAPTILER ---
+        window.renderMappa = function() {
+            const canAddWaterPoints = (loggedUser.ruolo === "Responsabile AIB" || loggedUser.ruolo === "Responsabile App");
+
+            document.getElementById('tabContent').innerHTML = `
+                ${canAddWaterPoints ? `
+                <div class="card p-4 mb-4">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-geo-alt-fill me-2"></i>Aggiungi Punto Rifornimento Idrico</h4>
+                    <form onsubmit="addWaterPoint(event)">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Foto del Punto Idrico (Obbligatoria)*</label>
+                            <input type="file" id="wpFoto" accept="image/*" class="form-control" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Nome / Identificativo Punto*</label>
+                                <input type="text" id="wpNome" class="form-control" placeholder="es. Idrante Piazza Municipio" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Tipologia Fonte*</label>
+                                <select id="wpTipo" class="form-select" required>
+                                    <option value="Idrante Stradale">Idrante Stradale</option>
+                                    <option value="Cisterna / Serbatoio">Cisterna / Serbatoio</option>
+                                    <option value="Fiume / Torrente">Fiume / Torrente</option>
+                                    <option value="Vasca Antincendio">Vasca Antincendio</option>
+                                    <option value="Piscina / Altro">Piscina / Altro</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-5 mb-3">
+                                <label class="form-label">Latitudine*</label>
+                                <input type="number" step="any" id="wpLat" class="form-control" placeholder="es. 42.4018" required>
+                            </div>
+                            <div class="col-md-5 mb-3">
+                                <label class="form-label">Longitudine*</label>
+                                <input type="number" step="any" id="wpLng" class="form-control" placeholder="es. 12.8625" required>
+                            </div>
+                            <div class="col-md-2 mb-3 d-flex align-items-end">
+                                <button type="button" class="btn btn-outline-secondary w-100" onclick="getGPSLocation()">
+                                    <i class="bi bi-crosshair"></i> GPS
+                                </button>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Note Tecniche (Attacchi, Pressione, Accessibilità)</label>
+                            <input type="text" id="wpNote" class="form-control" placeholder="es. Attacco UNI 45">
+                        </div>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva Punto Idrico</button>
+                    </form>
+                </div>
+                ` : `
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-info-circle me-2"></i>La mappa idrica è consultabile da tutti i volontari. L'inserimento dei punti è riservato al <strong>Responsabile AIB</strong> e al <strong>Responsabile App</strong>.
+                </div>
+                `}
+
+                <div class="card p-3 mb-4">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-map me-2"></i>Mappa Punti di Rifornimento Idrico - Provincia di Rieti (MapTiler)</h4>
+                    <div id="map"></div>
+                </div>
+
+                <h4 class="fw-bold mb-3">Elenco Punti Idrici Mappati (${waterPoints.length})</h4>
+                <div class="row" id="waterPointsList"></div>
+            `;
+
+            initLeafletMap();
+            renderWaterPointsList();
+        }
+
+        window.getGPSLocation = function() {
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    document.getElementById('wpLat').value = position.coords.latitude.toFixed(6);
+                    document.getElementById('wpLng').value = position.coords.longitude.toFixed(6);
+                }, function(error) {
+                    alert("Impossibile rilevare la posizione GPS: " + error.message);
+                });
+            } else {
+                alert("La geolocalizzazione non è supportata dal browser.");
+            }
+        }
+
+        window.initLeafletMap = function() {
+            leafletMap = L.map('map').setView([42.4018, 12.8625], 10);
+
+            L.tileLayer('https://api.maptiler.com/maps/openstreetmap/{z}/{x}/{y}.jpg?key=QeLP7wxI47cpyEeT1u36', {
+                tileSize: 512,
+                zoomOffset: -1,
+                minZoom: 1,
+                maxZoom: 19,
+                attribution: '&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+                crossOrigin: true
+            }).addTo(leafletMap);
+
+            waterPoints.forEach(wp => {
+                const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`;
+                const popupContent = `
+                    <div style="max-width: 200px;">
+                        ${wp.foto ? `<img src="${wp.foto}" style="width:100%; height:100px; object-fit:cover; border-radius:4px; margin-bottom:5px;">` : ''}
+                        <h6><strong>${wp.nome}</strong></h6>
+                        <p style="font-size:12px; margin-bottom:5px;">${wp.tipo}<br>${wp.note || ''}</p>
+                        <a href="${navUrl}" target="_blank" class="btn btn-sm btn-primary w-100 text-white fw-bold">
+                            <i class="bi bi-compass me-1"></i> Apri Google Maps
+                        </a>
+                    </div>
+                `;
+                L.marker([wp.lat, wp.lng]).addTo(leafletMap).bindPopup(popupContent);
+            });
+        }
+
+        window.renderWaterPointsList = function() {
+            let listHTML = waterPoints.map((wp, i) => {
+                const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`;
+                return `
+                    <div class="col-md-4 mb-3">
+                        <div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                            <div>
+                                ${wp.foto ? `<img src="${wp.foto}" class="hydrant-img mb-2" alt="Foto Punto Idrico">` : ''}
+                                <h5 class="fw-bold mb-1">${wp.nome}</h5>
+                                <span class="badge bg-info mb-2">${wp.tipo}</span>
+                                <p class="small text-muted mb-1"><strong>Coordinate:</strong> ${wp.lat}, ${wp.lng}</p>
+                                <p class="small text-muted mb-2"><strong>Note:</strong> ${wp.note || 'Nessuna nota'}</p>
+                            </div>
+                            <a href="${navUrl}" target="_blank" class="btn btn-primary btn-sm w-100 fw-bold mt-2">
+                                <i class="bi bi-compass me-1"></i> Naviga su Google Maps
+                            </a>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('waterPointsList').innerHTML = listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessun punto idrico mappato.</div>';
+        }
+
+        window.addWaterPoint = async function(e) {
+            e.preventDefault();
+            const fotoFile = document.getElementById('wpFoto').files[0];
+            const reader = new FileReader();
+
+            reader.onloadend = async function() {
+                const newWp = {
+                    nome: document.getElementById('wpNome').value,
+                    tipo: document.getElementById('wpTipo').value,
+                    lat: parseFloat(document.getElementById('wpLat').value),
+                    lng: parseFloat(document.getElementById('wpLng').value),
+                    note: document.getElementById('wpNote').value,
+                    foto: reader.result
+                };
+
+                try {
+                    await addDoc(collection(db, "waterPoints"), newWp);
+                    alert('Punto idrico aggiunto correttamente!');
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore punto idrico:", err);
+                }
+            };
+
+            if (fotoFile) {
+                reader.readAsDataURL(fotoFile);
+            }
+        }
+
+        // --- SEZIONE MAGAZZINO ---
+        window.renderMagazzino = function() {
+            let list = inventory.map((item, i) => `
+                <div class="col-md-4 mb-3">
+                    <div class="card p-3 text-center h-100">
+                        <h5 class="fw-bold">${item.nome}</h5>
+                        <p class="text-muted small mb-1">Categoria: ${item.cat}</p>
+                        <h2 class="display-6 fw-bold text-primary my-2">${item.qta}</h2>
+                        <p class="text-muted small">Scorta Minima: ${item.scortaMin}</p>
+                        <div class="btn-group">
+                            <button class="btn btn-outline-danger btn-sm" onclick="updateStock('${item.id}', ${item.qta}, -1)">-1</button>
+                            <button class="btn btn-outline-success btn-sm" onclick="updateStock('${item.id}', ${item.qta}, 1)">+1</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('tabContent').innerHTML = `
+                <div class="card p-4 mb-4">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-box-seam me-2"></i>Inserimento Attrezzatura / Materiale</h4>
+                    <form onsubmit="addMaterial(event)">
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label>Nome Attrezzatura/Materiale*</label><input type="text" id="matNome" class="form-control" placeholder="es. Gruppo Elettrogeno 5kW" required></div>
+                            <div class="col-md-6 mb-3"><label>Categoria*</label><input type="text" id="matCat" class="form-control" placeholder="es. Attrezzatura AIB, DPI" required></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label>Quantità Iniziale*</label><input type="number" id="matQta" class="form-control" required></div>
+                            <div class="col-md-6 mb-3"><label>Soglia Scorta Minima*</label><input type="number" id="matScorta" class="form-control" required></div>
+                        </div>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva in Magazzino</button>
+                    </form>
+                </div>
+
+                <h4 class="fw-bold mb-3">Attrezzature e Magazzino (${inventory.length})</h4>
+                <div class="row">${list.length > 0 ? list : '<div class="col-12 text-muted">Nessuna attrezzatura inserita.</div>'}</div>
+            `;
+        }
+
+        window.addMaterial = async function(e) {
+            e.preventDefault();
+            const newItem = {
+                nome: document.getElementById('matNome').value,
+                cat: document.getElementById('matCat').value,
+                qta: parseInt(document.getElementById('matQta').value, 10),
+                scortaMin: parseInt(document.getElementById('matScorta').value, 10)
+            };
+
+            try {
+                await addDoc(collection(db, "inventory"), newItem);
+                alert('Attrezzatura aggiunta!');
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore magazzino:", err);
+            }
+        }
+
+        window.updateStock = async function(itemId, currentQta, change) {
+            const newQta = Math.max(0, currentQta + change);
+            try {
+                await updateDoc(doc(db, "inventory", itemId), { qta: newQta });
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore stock:", err);
+            }
+        }
+
+        loadCloudData();
+    </script>
+</body>
+</html>
