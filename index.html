@@ -82,10 +82,12 @@
             "Responsabile App"
         ];
 
-        const ROLES_CAN_EDIT_COURSES = [
+        const ROLES_MANAGERS = [
             "Presidente (Legale Rappresentante)",
             "Vice Presidente",
             "Segreteria",
+            "Tesoriere",
+            "Responsabile Mezzi",
             "Responsabile AIB",
             "Responsabile App"
         ];
@@ -118,9 +120,48 @@
         let availabilities = [];
         let waterPoints = [];
         let refuels = [];
+        let announcements = [];
 
         let activeTab = 'anagrafica';
         let leafletMap = null;
+
+        // Funzione di utilità per verificare se l'utente è un Super Admin
+        function isSuperAdmin() {
+            return loggedUser && (loggedUser.ruolo === "Responsabile App" || loggedUser.ruolo === "Responsabile AIB");
+        }
+
+        // Funzione di utilità per verificare se l'utente è un Responsabile
+        function isManagerRole() {
+            return loggedUser && ROLES_MANAGERS.includes(loggedUser.ruolo);
+        }
+
+        // Funzione per comprimere le immagini
+        function compressImage(file, maxWidth = 800, quality = 0.7) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = function (e) {
+                    const img = new Image();
+                    img.onload = function () {
+                        const canvas = document.createElement('canvas');
+                        let width = img.width;
+                        let height = img.height;
+
+                        if (width > maxWidth) {
+                            height = Math.round((height * maxWidth) / width);
+                            width = maxWidth;
+                        }
+
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+                        resolve(canvas.toDataURL('image/jpeg', quality));
+                    };
+                    img.src = e.target.result;
+                };
+                reader.readAsDataURL(file);
+            });
+        }
 
         window.loadCloudData = async function() {
             try {
@@ -147,6 +188,9 @@
 
                 const refSnap = await getDocs(collection(db, "refuels"));
                 refuels = refSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+                const annSnap = await getDocs(collection(db, "announcements"));
+                announcements = annSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
                 init();
             } catch (err) {
@@ -241,9 +285,10 @@
         window.handleRegister = async function(e) {
             e.preventDefault();
             const fotoFile = document.getElementById('regFoto').files[0];
-            const reader = new FileReader();
+            if (!fotoFile) return;
 
-            reader.onloadend = async function() {
+            try {
+                const compressedDataUrl = await compressImage(fotoFile, 500, 0.7);
                 const newUser = {
                     nome: document.getElementById('regNome').value,
                     cognome: document.getElementById('regCognome').value,
@@ -255,21 +300,15 @@
                     taglia: document.getElementById('regTaglia').value,
                     corsi: "",
                     pass: document.getElementById('regPass').value,
-                    foto: reader.result
+                    foto: compressedDataUrl
                 };
 
-                try {
-                    await addDoc(collection(db, "users"), newUser);
-                    alert('Registrazione completata! Ora puoi accedere.');
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore salvataggio utente:", err);
-                    alert("Errore durante la registrazione.");
-                }
-            };
-
-            if (fotoFile) {
-                reader.readAsDataURL(fotoFile);
+                await addDoc(collection(db, "users"), newUser);
+                alert('Registrazione completata! Ora puoi accedere.');
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore salvataggio utente:", err);
+                alert("Errore durante la registrazione.");
             }
         }
 
@@ -311,6 +350,11 @@
 
                 <ul class="nav nav-pills nav-fill mb-4 bg-white p-2 rounded shadow-sm border flex-wrap gap-1">
                     <li class="nav-item">
+                        <a class="nav-link ${activeTab === 'bacheca' ? 'active' : ''}" onclick="switchTab('bacheca')">
+                            <i class="bi bi-megaphone-fill me-1"></i> Bacheca Avvisi
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link ${activeTab === 'anagrafica' ? 'active' : ''}" onclick="switchTab('anagrafica')">
                             <i class="bi bi-people-fill me-1"></i> Volontari
                         </a>
@@ -342,7 +386,7 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link ${activeTab === 'mappa' ? 'active' : ''}" onclick="switchTab('mappa')">
-                            <i class="bi bi-geo-alt-fill me-1"></i> Mappa Idrica Rieti
+                            <i class="bi bi-geo-alt-fill me-1"></i> Mappa Idrica
                         </a>
                     </li>
                     <li class="nav-item">
@@ -355,7 +399,8 @@
                 <div id="tabContent"></div>
             `;
 
-            if (activeTab === 'anagrafica') renderAnagrafica();
+            if (activeTab === 'bacheca') renderBacheca();
+            else if (activeTab === 'anagrafica') renderAnagrafica();
             else if (activeTab === 'turni') renderTurni();
             else if (activeTab === 'disponibilita') renderDisponibilita();
             else if (activeTab === 'storico') renderStorico();
@@ -365,20 +410,108 @@
             else if (activeTab === 'magazzino') renderMagazzino();
         }
 
+        // --- SEZIONE BACHECA AVVISI ---
+        window.renderBacheca = function() {
+            const canPost = isManagerRole();
+            const isAdmin = isSuperAdmin();
+
+            let annHTML = announcements.map((ann) => `
+                <div class="col-md-12 mb-3">
+                    <div class="card p-3 border-start border-4 border-warning shadow-sm">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="fw-bold text-primary mb-0">${ann.titolo}</h5>
+                            <small class="text-muted">${ann.data}</small>
+                        </div>
+                        <p class="mb-2 text-dark" style="white-space: pre-line;">${ann.testo}</p>
+                        <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-2">
+                            <small class="text-secondary">Pubblicato da: <strong>${ann.autore}</strong> (${ann.ruoloAutore})</small>
+                            ${isAdmin ? `
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteAnnouncement('${ann.id}')">
+                                    <i class="bi bi-trash"></i> Elimina
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('tabContent').innerHTML = `
+                ${canPost ? `
+                <div class="card p-4 mb-4 bg-light border">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-megaphone me-2"></i>Pubblica Nuovo Avviso in Bacheca</h4>
+                    <form onsubmit="addAnnouncement(event)">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Titolo Comunicato*</label>
+                            <input type="text" id="annTitolo" class="form-control" placeholder="es. Convocazione Assemblea / Emergenza Meteo" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Testo del Messaggio*</label>
+                            <textarea id="annTesto" class="form-control" rows="3" placeholder="Scrivi qui l'avviso per i volontari..." required></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-warning fw-bold text-dark"><i class="bi bi-send me-1"></i>Pubblica Avviso</button>
+                    </form>
+                </div>
+                ` : `
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-info-circle me-2"></i>Sezione Bacheca in sola lettura. I comunicati ufficiali vengono pubblicati dai Responsabili dell'Associazione.
+                </div>
+                `}
+
+                <h4 class="fw-bold mb-3"><i class="bi bi-pin-angle me-2"></i>Comunicati ed Avvisi Ufficiali (${announcements.length})</h4>
+                <div class="row">${announcements.length > 0 ? annHTML : '<div class="col-12 text-muted">Nessun avviso presente in bacheca.</div>'}</div>
+            `;
+        }
+
+        window.addAnnouncement = async function(e) {
+            e.preventDefault();
+            const newAnn = {
+                titolo: document.getElementById('annTitolo').value,
+                testo: document.getElementById('annTesto').value,
+                data: new Date().toLocaleString('it-IT'),
+                autore: `${loggedUser.nome} ${loggedUser.cognome}`,
+                ruoloAutore: loggedUser.ruolo
+            };
+
+            try {
+                await addDoc(collection(db, "announcements"), newAnn);
+                alert("Avviso pubblicato in bacheca!");
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore avviso:", err);
+            }
+        }
+
+        window.deleteAnnouncement = async function(id) {
+            if (confirm("Sei sicuro di voler eliminare questo avviso dalla bacheca?")) {
+                try {
+                    await deleteDoc(doc(db, "announcements", id));
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore eliminazione avviso:", err);
+                }
+            }
+        }
+
+        // --- SEZIONE ANAGRAFICA ---
         window.renderAnagrafica = function() {
-            const canManageCourses = ROLES_CAN_EDIT_COURSES.includes(loggedUser.ruolo);
-            const isAppAdmin = loggedUser.ruolo === "Responsabile App";
+            const isAdmin = isSuperAdmin();
 
             let usersListHTML = users.map((u, index) => {
-                let rolesDropdown = '';
-                if (isAppAdmin) {
-                    rolesDropdown = `
-                        <div class="mt-2 pt-2 border-top">
-                            <label class="small fw-bold text-danger">Gestione Ruolo (Riservato Responsabile App):</label>
-                            <select class="form-select form-select-sm mt-1" onchange="changeUserRole('${u.id}', this.value)">
-                                <option value="Volontario" ${u.ruolo === 'Volontario' ? 'selected' : ''}>Volontario</option>
-                                ${ROLES_SINGLE.map(r => `<option value="${r}" ${u.ruolo === r ? 'selected' : ''}>${r}</option>`).join('')}
-                            </select>
+                let adminActions = '';
+                if (isAdmin) {
+                    adminActions = `
+                        <div class="mt-2 pt-2 border-top bg-light p-2 rounded">
+                            <label class="small fw-bold text-danger mb-1">Pannello Modifica (Responsabile App/AIB):</label>
+                            <div class="mb-2">
+                                <label class="small text-muted">Ruolo Assegnato:</label>
+                                <select class="form-select form-select-sm" onchange="changeUserRole('${u.id}', this.value)">
+                                    <option value="Volontario" ${u.ruolo === 'Volontario' ? 'selected' : ''}>Volontario</option>
+                                    ${ROLES_SINGLE.map(r => `<option value="${r}" ${u.ruolo === r ? 'selected' : ''}>${r}</option>`).join('')}
+                                </select>
+                            </div>
+                            <button class="btn btn-sm btn-outline-danger w-100 mt-1" onclick="deleteUser('${u.id}')">
+                                <i class="bi bi-trash me-1"></i>Elimina Volontario
+                            </button>
                         </div>
                     `;
                 }
@@ -398,7 +531,7 @@
                             
                             <div class="mt-2 pt-2 border-top">
                                 <strong>Corsi Effettuati:</strong>
-                                ${canManageCourses ? `
+                                ${isAdmin ? `
                                     <div class="input-group input-group-sm mt-1">
                                         <input type="text" id="courseInput_${index}" class="form-control" value="${u.corsi || ''}" placeholder="AIB, Primo Soccorso, ecc.">
                                         <button class="btn btn-outline-primary" onclick="saveCourses('${u.id}', ${index})">Salva</button>
@@ -407,7 +540,7 @@
                                     <p class="mb-0 text-secondary">${u.corsi ? u.corsi : '<em>Nessun corso inserito</em>'}</p>
                                 `}
                             </div>
-                            ${rolesDropdown}
+                            ${adminActions}
                         </div>
                     </div>
                 `;
@@ -440,8 +573,22 @@
             }
         }
 
+        window.deleteUser = async function(userId) {
+            if (confirm("Sei sicuro di voler eliminare questo volontario dall'anagrafica?")) {
+                try {
+                    await deleteDoc(doc(db, "users", userId));
+                    alert("Volontario eliminato.");
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore eliminazione utente:", err);
+                }
+            }
+        }
+
         // --- SEZIONE TURNI & SERVIZI ---
         window.renderTurni = function() {
+            const isAdmin = isSuperAdmin();
+
             let shiftsHTML = shifts.map((s, i) => `
                 <div class="col-md-6 mb-3">
                     <div class="card p-3 border-start border-4 border-primary h-100 d-flex flex-column justify-content-between">
@@ -452,7 +599,7 @@
                             </div>
                             <p class="mb-1"><strong>Data / Ora:</strong> ${s.data} - Inizio: ${s.oraInizio} (Presunta fine: ${s.oraFine})</p>
                             <p class="mb-1"><strong>Note / Luogo:</strong> ${s.note || 'Nessuna nota'}</p>
-                            <p class="mb-1"><strong>Mezzo usufruito:</strong> ${s.mezzoUsato || 'Nessun mezzo assegnato'}</p>
+                            <p class="mb-1"><strong>Mezzo usufruito:</strong> ${s.mezzoUsato || 'Nessun mezzo'}</p>
                             <hr class="my-2">
                             <strong>Squadra Operativa (${s.volontariDettaglio.length}):</strong>
                             <ul class="list-unstyled mt-1 small mb-2">
@@ -461,15 +608,22 @@
                                 `).join('')}
                             </ul>
                         </div>
-                        <button class="btn btn-outline-danger btn-sm mt-3 w-100 fw-bold" onclick="closeShiftModal('${s.id}', ${i})">
-                            <i class="bi bi-check2-square me-1"></i> Chiudi e Salva in Storico
-                        </button>
+                        <div>
+                            <button class="btn btn-outline-success btn-sm mt-3 w-100 fw-bold" onclick="closeShiftModal('${s.id}', ${i})">
+                                <i class="bi bi-check2-square me-1"></i> Chiudi e Salva in Storico
+                            </button>
+                            ${isAdmin ? `
+                                <button class="btn btn-outline-danger btn-sm mt-2 w-100" onclick="deleteActiveShift('${s.id}')">
+                                    <i class="bi bi-trash me-1"></i> Elimina Turno Senza Salvare
+                                </button>
+                            ` : ''}
+                        </div>
                     </div>
                 </div>
             `).join('');
 
             let optionsTipologia = SERVICE_TYPES.map(st => `<option value="${st}">${st}</option>`).join('');
-            let optionsMezzi = `<option value="Nessun Mezzo">Nessun Mezzo</option>` + vehicles.map(v => `<option value="${v.modello} (${v.targa})">${v.modello} [${v.targa}] - Km: ${v.km}</option>`).join('');
+            let optionsMezzi = `<option value="Nessun Mezzo">Nessun Mezzo</option>` + vehicles.map(v => `<option value="${v.id}">${v.modello} [${v.targa}] - Km attuali: ${v.km}</option>`).join('');
 
             let usersChecklistHTML = users.map((u, idx) => `
                 <div class="border p-2 rounded mb-2 bg-white">
@@ -615,12 +769,25 @@
                 return;
             }
 
+            const mezzoId = document.getElementById('shiftMezzo').value;
+            let mezzoStr = "Nessun Mezzo";
+            let vehicleObj = null;
+
+            if (mezzoId !== "Nessun Mezzo") {
+                vehicleObj = vehicles.find(v => v.id === mezzoId);
+                if (vehicleObj) {
+                    mezzoStr = `${vehicleObj.modello} (${vehicleObj.targa})`;
+                }
+            }
+
             const newShift = {
                 tipoServizio: document.getElementById('shiftTipo').value,
                 data: document.getElementById('shiftData').value,
                 oraInizio: document.getElementById('shiftOraInizio').value,
                 oraFine: document.getElementById('shiftOraFine').value,
-                mezzoUsato: document.getElementById('shiftMezzo').value,
+                mezzoId: mezzoId,
+                mezzoUsato: mezzoStr,
+                kmInizialiMezzo: vehicleObj ? vehicleObj.km : 0,
                 note: document.getElementById('shiftNote').value,
                 volontariDettaglio: selectedVols
             };
@@ -637,40 +804,81 @@
         window.closeShiftModal = async function(shiftId, index) {
             const shiftToClose = shifts[index];
             const oraFineReale = prompt("Inserisci l'ora di fine effettiva del servizio (HH:MM):", shiftToClose.oraFine) || shiftToClose.oraFine;
-            const kmPercorsi = prompt("Inserisci i KM percorsi durante il servizio:", "0");
+
+            let kmPercorsi = 0;
+            let kmFinali = 0;
+
+            if (shiftToClose.mezzoId && shiftToClose.mezzoId !== "Nessun Mezzo") {
+                const currentVehicle = vehicles.find(v => v.id === shiftToClose.mezzoId);
+                const kmAttuali = currentVehicle ? currentVehicle.km : (shiftToClose.kmInizialiMezzo || 0);
+
+                const kmFinaliInput = prompt(`Inserisci i KM FINALI segnati sul contachilometri del mezzo (${shiftToClose.mezzoUsato}). KM attuali registrati: ${kmAttuali}`, kmAttuali);
+                
+                if (kmFinaliInput !== null) {
+                    kmFinali = parseInt(kmFinaliInput, 10) || kmAttuali;
+                    if (kmFinali < kmAttuali) {
+                        alert("I KM finali non possono essere inferiori a quelli iniziali!");
+                        return;
+                    }
+                    kmPercorsi = kmFinali - kmAttuali;
+
+                    if (currentVehicle) {
+                        await updateDoc(doc(db, "vehicles", currentVehicle.id), { km: kmFinali });
+                    }
+                }
+            } else {
+                const kmManual = prompt("KM percorsi durante il servizio:", "0");
+                kmPercorsi = parseInt(kmManual, 10) || 0;
+            }
 
             const completedShift = {
                 ...shiftToClose,
                 oraFine: oraFineReale,
-                kmPercorsi: kmPercorsi || "0",
+                kmFinaliMezzo: kmFinali,
+                kmPercorsi: kmPercorsi,
                 dataChiusura: new Date().toLocaleDateString('it-IT')
             };
 
             try {
                 await addDoc(collection(db, "historyShifts"), completedShift);
                 await deleteDoc(doc(db, "shifts", shiftId));
-                alert("Servizio chiuso e registrato nello Storico!");
+                alert(`Servizio chiuso! Percorsi ${kmPercorsi} km. Chilometraggio del mezzo aggiornato nel database.`);
                 loadCloudData();
             } catch (err) {
                 console.error("Errore chiusura:", err);
             }
         }
 
+        window.deleteActiveShift = async function(shiftId) {
+            if (confirm("Sei sicuro di voler eliminare questo turno in corso?")) {
+                try {
+                    await deleteDoc(doc(db, "shifts", shiftId));
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore eliminazione turno:", err);
+                }
+            }
+        }
+
         // --- SEZIONE DISPONIBILITÀ ---
         window.renderDisponibilita = function() {
-            let listHTML = availabilities.map((a, i) => {
+            const isAdmin = isSuperAdmin();
+
+            let listHTML = availabilities.map((a) => {
                 const isMine = a.userEmail === loggedUser.email;
                 return `
                     <div class="col-md-4 mb-3">
-                        <div class="card p-3 border-start border-4 ${isMine ? 'border-success bg-light' : 'border-info'} h-100">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <h6 class="fw-bold mb-0 text-primary">${a.userName}</h6>
-                                ${isMine ? '<span class="badge bg-success">Tua Disponibilità</span>' : ''}
+                        <div class="card p-3 border-start border-4 ${isMine ? 'border-success bg-light' : 'border-info'} h-100 d-flex flex-column justify-content-between">
+                            <div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <h6 class="fw-bold mb-0 text-primary">${a.userName}</h6>
+                                    ${isMine ? '<span class="badge bg-success">Tua Disponibilità</span>' : ''}
+                                </div>
+                                <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
+                                <p class="mb-1"><strong>Fascia Oraria:</strong> ${a.oraInizio} - ${a.oraFine}</p>
+                                <p class="mb-1 small text-muted"><strong>Note:</strong> ${a.note || 'Nessuna'}</p>
                             </div>
-                            <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
-                            <p class="mb-1"><strong>Fascia Oraria:</strong> ${a.oraInizio} - ${a.oraFine}</p>
-                            <p class="mb-1 small text-muted"><strong>Note:</strong> ${a.note || 'Nessuna'}</p>
-                            ${isMine ? `
+                            ${(isMine || isAdmin) ? `
                                 <div class="text-end mt-2">
                                     <button class="btn btn-sm btn-outline-danger" onclick="deleteAvailability('${a.id}')">
                                         <i class="bi bi-trash"></i> Elimina
@@ -748,23 +956,34 @@
 
         // --- SEZIONE STORICO SERVIZI ---
         window.renderStorico = function() {
-            let historyListHTML = historyShifts.map((hs, i) => `
+            const isAdmin = isSuperAdmin();
+
+            let historyListHTML = historyShifts.map((hs) => `
                 <div class="col-md-6 mb-3">
-                    <div class="card p-3 border-start border-4 border-secondary h-100">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="fw-bold text-dark mb-0">${hs.tipoServizio}</h5>
-                            <span class="badge bg-secondary">Concluso</span>
+                    <div class="card p-3 border-start border-4 border-secondary h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="fw-bold text-dark mb-0">${hs.tipoServizio}</h5>
+                                <span class="badge bg-secondary">Concluso</span>
+                            </div>
+                            <p class="mb-1"><strong>Giorno:</strong> ${hs.data}</p>
+                            <p class="mb-1"><strong>Ora Inizio / Fine:</strong> ${hs.oraInizio} - ${hs.oraFine}</p>
+                            <p class="mb-1"><strong>Mezzi Usati:</strong> ${hs.mezzoUsato || 'Nessuno'}</p>
+                            <p class="mb-1 text-primary"><strong>KM Percorsi:</strong> ${hs.kmPercorsi} km ${hs.kmFinaliMezzo ? `(Km finali mezzo: ${hs.kmFinaliMezzo})` : ''}</p>
+                            <p class="mb-1"><strong>Note:</strong> ${hs.note || 'Nessuna'}</p>
+                            <hr class="my-2">
+                            <small class="fw-bold">Squadra Operativa:</small>
+                            <ul class="list-unstyled small mt-1 mb-0">
+                                ${hs.volontariDettaglio ? hs.volontariDettaglio.map(v => `<li>• ${v.nome} (${v.ruoloOperativo})</li>`).join('') : ''}
+                            </ul>
                         </div>
-                        <p class="mb-1"><strong>Giorno:</strong> ${hs.data}</p>
-                        <p class="mb-1"><strong>Ora Inizio / Fine:</strong> ${hs.oraInizio} - ${hs.oraFine}</p>
-                        <p class="mb-1"><strong>Mezzi Usati:</strong> ${hs.mezzoUsato || 'Nessuno'}</p>
-                        <p class="mb-1"><strong>KM Percorsi:</strong> ${hs.kmPercorsi} km</p>
-                        <p class="mb-1"><strong>Note:</strong> ${hs.note || 'Nessuna'}</p>
-                        <hr class="my-2">
-                        <small class="fw-bold">Squadra Operativa:</small>
-                        <ul class="list-unstyled small mt-1 mb-0">
-                            ${hs.volontariDettaglio ? hs.volontariDettaglio.map(v => `<li> ${v.nome} (${v.ruoloOperativo})</li>`).join('') : ''}
-                        </ul>
+                        ${isAdmin ? `
+                            <div class="text-end mt-3 border-top pt-2">
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteHistoryShift('${hs.id}')">
+                                    <i class="bi bi-trash"></i> Elimina dallo Storico
+                                </button>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
             `).join('');
@@ -775,22 +994,43 @@
             `;
         }
 
+        window.deleteHistoryShift = async function(id) {
+            if (confirm("Sei sicuro di voler eliminare questo servizio dallo storico?")) {
+                try {
+                    await deleteDoc(doc(db, "historyShifts", id));
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore eliminazione storico:", err);
+                }
+            }
+        }
+
         // --- SEZIONE MEZZI ---
         window.renderMezzi = function() {
-            let list = vehicles.map((v, i) => `
+            const isAdmin = isSuperAdmin();
+
+            let list = vehicles.map((v) => `
                 <div class="col-md-6 mb-3">
-                    <div class="card p-3 h-100">
-                        ${v.foto ? `<img src="${v.foto}" class="vehicle-img mb-3" alt="Foto Mezzo">` : ''}
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="fw-bold mb-0">${v.modello}</h5>
-                            <span class="badge bg-secondary">${v.targa}</span>
+                    <div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            ${v.foto ? `<img src="${v.foto}" class="vehicle-img mb-3" alt="Foto Mezzo">` : ''}
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="fw-bold mb-0">${v.modello}</h5>
+                                <span class="badge bg-secondary">${v.targa}</span>
+                            </div>
+                            <p class="text-muted small mb-2">Tipologia: <strong>${v.tipo}</strong> | Km attuali: <strong>${v.km} km</strong></p>
+                            <div class="p-2 bg-light rounded small">
+                                <div><strong>Scadenza Revisione:</strong> ${v.revisione}</div>
+                                <div><strong>Scadenza Assicurazione:</strong> ${v.assicurazione}</div>
+                                <div><strong>Scadenza Bollo:</strong> ${v.bollo}</div>
+                            </div>
                         </div>
-                        <p class="text-muted small mb-2">Tipologia: <strong>${v.tipo}</strong> | Km attuali: <strong>${v.km} km</strong></p>
-                        <div class="p-2 bg-light rounded small">
-                            <div><strong>Scadenza Revisione:</strong> ${v.revisione}</div>
-                            <div><strong>Scadenza Assicurazione:</strong> ${v.assicurazione}</div>
-                            <div><strong>Scadenza Bollo:</strong> ${v.bollo}</div>
-                        </div>
+                        ${isAdmin ? `
+                            <div class="text-end mt-3 border-top pt-2">
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick="updateVehicleKm('${v.id}', ${v.km})">Modifica KM</button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteVehicle('${v.id}')"><i class="bi bi-trash"></i> Elimina</button>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
             `).join('');
@@ -828,9 +1068,10 @@
         window.addVehicle = async function(e) {
             e.preventDefault();
             const fotoFile = document.getElementById('vFoto').files[0];
-            const reader = new FileReader();
+            if (!fotoFile) return;
 
-            reader.onloadend = async function() {
+            try {
+                const compressedDataUrl = await compressImage(fotoFile, 600, 0.7);
                 const newVeh = {
                     modello: document.getElementById('vModello').value,
                     targa: document.getElementById('vTarga').value,
@@ -839,26 +1080,45 @@
                     revisione: document.getElementById('vRevisione').value,
                     assicurazione: document.getElementById('vAssicurazione').value,
                     bollo: document.getElementById('vBollo').value,
-                    foto: reader.result
+                    foto: compressedDataUrl
                 };
 
+                await addDoc(collection(db, "vehicles"), newVeh);
+                alert('Mezzo salvato correttamente!');
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore mezzo:", err);
+            }
+        }
+
+        window.updateVehicleKm = async function(vId, currentKm) {
+            const newKmInput = prompt("Inserisci i nuovi KM aggiornati del mezzo:", currentKm);
+            if (newKmInput !== null) {
+                const newKm = parseInt(newKmInput, 10);
                 try {
-                    await addDoc(collection(db, "vehicles"), newVeh);
-                    alert('Mezzo salvato correttamente!');
+                    await updateDoc(doc(db, "vehicles", vId), { km: newKm });
                     loadCloudData();
                 } catch (err) {
-                    console.error("Errore mezzo:", err);
+                    console.error("Errore aggiornamento KM:", err);
                 }
-            };
+            }
+        }
 
-            if (fotoFile) {
-                reader.readAsDataURL(fotoFile);
+        window.deleteVehicle = async function(vId) {
+            if (confirm("Sei sicuro di voler eliminare questo mezzo dal parco veicoli?")) {
+                try {
+                    await deleteDoc(doc(db, "vehicles", vId));
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore eliminazione mezzo:", err);
+                }
             }
         }
 
         // --- SEZIONE RIFORNIMENTI MEZZI ---
         window.renderRifornimenti = function() {
-            const isManager = ROLES_CAN_EDIT_COURSES.includes(loggedUser.ruolo) || loggedUser.ruolo === "Responsabile Mezzi" || loggedUser.ruolo === "Tesoriere";
+            const isManager = isManagerRole();
+            const isAdmin = isSuperAdmin();
 
             let optionsMezzi = vehicles.map(v => `<option value="${v.modello} (${v.targa})">${v.modello} [${v.targa}]</option>`).join('');
 
@@ -868,10 +1128,17 @@
                         <div>
                             ${r.fotoScontrino ? `<img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Scontrino Rifornimento">` : ''}
                             <h5 class="fw-bold mb-1">${r.mezzo}</h5>
-                            <span class="badge bg-warning text-dark mb-2"> ${r.importo} (${r.litri} Litri)</span>
+                            <span class="badge bg-warning text-dark mb-2">€ ${r.importo} (${r.litri} Litri)</span>
                             <p class="small text-muted mb-1"><strong>Data / Ora:</strong> ${r.data} - ${r.ora}</p>
                             <p class="small text-muted mb-0"><strong>Registrato da:</strong> ${r.volontario}</p>
                         </div>
+                        ${isAdmin ? `
+                            <div class="text-end mt-2 pt-2 border-top">
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteRefuel('${r.id}')">
+                                    <i class="bi bi-trash"></i> Elimina
+                                </button>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
             `).join('');
@@ -907,7 +1174,7 @@
                                 <input type="number" step="0.01" id="refLitri" class="form-control" placeholder="es. 45.5" required>
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">Importo Totale ()*</label>
+                                <label class="form-label">Importo Totale (€)*</label>
                                 <input type="number" step="0.01" id="refImporto" class="form-control" placeholder="es. 75.00" required>
                             </div>
                         </div>
@@ -916,7 +1183,7 @@
                 </div>
 
                 ${isManager ? `
-                    <h4 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Storico Rifornimenti Mezzi (Riservato Responsabili) (${refuels.length})</h4>
+                    <h4 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Storico Rifornimenti Mezzi (${refuels.length})</h4>
                     <div class="row">${historyRefuelsHTML.length > 0 ? historyRefuelsHTML : '<div class="col-12 text-muted">Nessun rifornimento registrato nello storico.</div>'}</div>
                 ` : `
                     <div class="alert alert-info">
@@ -931,9 +1198,10 @@
         window.addRefuel = async function(e) {
             e.preventDefault();
             const fotoFile = document.getElementById('refFoto').files[0];
-            const reader = new FileReader();
+            if (!fotoFile) return;
 
-            reader.onloadend = async function() {
+            try {
+                const compressedDataUrl = await compressImage(fotoFile, 600, 0.7);
                 const newRef = {
                     mezzo: document.getElementById('refMezzo').value,
                     data: document.getElementById('refData').value,
@@ -941,27 +1209,31 @@
                     litri: parseFloat(document.getElementById('refLitri').value),
                     importo: parseFloat(document.getElementById('refImporto').value),
                     volontario: `${loggedUser.nome} ${loggedUser.cognome}`,
-                    fotoScontrino: reader.result
+                    fotoScontrino: compressedDataUrl
                 };
 
+                await addDoc(collection(db, "refuels"), newRef);
+                alert('Rifornimento registrato correttamente nel cloud!');
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore rifornimento:", err);
+            }
+        }
+
+        window.deleteRefuel = async function(id) {
+            if (confirm("Sei sicuro di voler eliminare questa registrazione di rifornimento?")) {
                 try {
-                    await addDoc(collection(db, "refuels"), newRef);
-                    alert('Rifornimento registrato correttamente nel cloud!');
+                    await deleteDoc(doc(db, "refuels", id));
                     loadCloudData();
                 } catch (err) {
-                    console.error("Errore rifornimento:", err);
-                    alert("Errore durante il salvataggio del rifornimento.");
+                    console.error("Errore eliminazione rifornimento:", err);
                 }
-            };
-
-            if (fotoFile) {
-                reader.readAsDataURL(fotoFile);
             }
         }
 
         // --- SEZIONE MAPPA IDRICA CON MAPTILER ---
         window.renderMappa = function() {
-            const canAddWaterPoints = (loggedUser.ruolo === "Responsabile AIB" || loggedUser.ruolo === "Responsabile App");
+            const canAddWaterPoints = isSuperAdmin();
 
             document.getElementById('tabContent').innerHTML = `
                 ${canAddWaterPoints ? `
@@ -1071,7 +1343,9 @@
         }
 
         window.renderWaterPointsList = function() {
-            let listHTML = waterPoints.map((wp, i) => {
+            const isAdmin = isSuperAdmin();
+
+            let listHTML = waterPoints.map((wp) => {
                 const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`;
                 return `
                     <div class="col-md-4 mb-3">
@@ -1083,9 +1357,16 @@
                                 <p class="small text-muted mb-1"><strong>Coordinate:</strong> ${wp.lat}, ${wp.lng}</p>
                                 <p class="small text-muted mb-2"><strong>Note:</strong> ${wp.note || 'Nessuna nota'}</p>
                             </div>
-                            <a href="${navUrl}" target="_blank" class="btn btn-primary btn-sm w-100 fw-bold mt-2">
-                                <i class="bi bi-compass me-1"></i> Naviga su Google Maps
-                            </a>
+                            <div>
+                                <a href="${navUrl}" target="_blank" class="btn btn-primary btn-sm w-100 fw-bold mt-2">
+                                    <i class="bi bi-compass me-1"></i> Naviga su Google Maps
+                                </a>
+                                ${isAdmin ? `
+                                    <button class="btn btn-outline-danger btn-sm w-100 mt-2" onclick="deleteWaterPoint('${wp.id}')">
+                                        <i class="bi bi-trash"></i> Elimina Punto
+                                    </button>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
                 `;
@@ -1097,45 +1378,62 @@
         window.addWaterPoint = async function(e) {
             e.preventDefault();
             const fotoFile = document.getElementById('wpFoto').files[0];
-            const reader = new FileReader();
+            if (!fotoFile) return;
 
-            reader.onloadend = async function() {
+            try {
+                const compressedDataUrl = await compressImage(fotoFile, 600, 0.7);
                 const newWp = {
                     nome: document.getElementById('wpNome').value,
                     tipo: document.getElementById('wpTipo').value,
                     lat: parseFloat(document.getElementById('wpLat').value),
                     lng: parseFloat(document.getElementById('wpLng').value),
                     note: document.getElementById('wpNote').value,
-                    foto: reader.result
+                    foto: compressedDataUrl
                 };
 
+                await addDoc(collection(db, "waterPoints"), newWp);
+                alert('Punto idrico aggiunto correttamente!');
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore punto idrico:", err);
+            }
+        }
+
+        window.deleteWaterPoint = async function(id) {
+            if (confirm("Sei sicuro di voler eliminare questo punto idrico?")) {
                 try {
-                    await addDoc(collection(db, "waterPoints"), newWp);
-                    alert('Punto idrico aggiunto correttamente!');
+                    await deleteDoc(doc(db, "waterPoints", id));
                     loadCloudData();
                 } catch (err) {
-                    console.error("Errore punto idrico:", err);
+                    console.error("Errore eliminazione punto idrico:", err);
                 }
-            };
-
-            if (fotoFile) {
-                reader.readAsDataURL(fotoFile);
             }
         }
 
         // --- SEZIONE MAGAZZINO ---
         window.renderMagazzino = function() {
-            let list = inventory.map((item, i) => `
+            const isAdmin = isSuperAdmin();
+
+            let list = inventory.map((item) => `
                 <div class="col-md-4 mb-3">
-                    <div class="card p-3 text-center h-100">
-                        <h5 class="fw-bold">${item.nome}</h5>
-                        <p class="text-muted small mb-1">Categoria: ${item.cat}</p>
-                        <h2 class="display-6 fw-bold text-primary my-2">${item.qta}</h2>
-                        <p class="text-muted small">Scorta Minima: ${item.scortaMin}</p>
-                        <div class="btn-group">
-                            <button class="btn btn-outline-danger btn-sm" onclick="updateStock('${item.id}', ${item.qta}, -1)">-1</button>
-                            <button class="btn btn-outline-success btn-sm" onclick="updateStock('${item.id}', ${item.qta}, 1)">+1</button>
+                    <div class="card p-3 text-center h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <h5 class="fw-bold">${item.nome}</h5>
+                            <p class="text-muted small mb-1">Categoria: ${item.cat}</p>
+                            <h2 class="display-6 fw-bold text-primary my-2">${item.qta}</h2>
+                            <p class="text-muted small">Scorta Minima: ${item.scortaMin}</p>
+                            <div class="btn-group mb-2">
+                                <button class="btn btn-outline-danger btn-sm" onclick="updateStock('${item.id}', ${item.qta}, -1)">-1</button>
+                                <button class="btn btn-outline-success btn-sm" onclick="updateStock('${item.id}', ${item.qta}, 1)">+1</button>
+                            </div>
                         </div>
+                        ${isAdmin ? `
+                            <div class="border-top pt-2">
+                                <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteInventoryItem('${item.id}')">
+                                    <i class="bi bi-trash"></i> Elimina Articolo
+                                </button>
+                            </div>
+                        ` : ''}
                     </div>
                 </div>
             `).join('');
@@ -1186,6 +1484,17 @@
                 loadCloudData();
             } catch (err) {
                 console.error("Errore stock:", err);
+            }
+        }
+
+        window.deleteInventoryItem = async function(id) {
+            if (confirm("Sei sicuro di voler eliminare questo articolo dal magazzino?")) {
+                try {
+                    await deleteDoc(doc(db, "inventory", id));
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore eliminazione magazzino:", err);
+                }
             }
         }
 
