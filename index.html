@@ -49,7 +49,7 @@
     </nav>
 
     <div class="container my-4" id="appContainer">
-        <!-- Verr‡ popolato via JavaScript -->
+        <!-- Verr√† popolato via JavaScript -->
     </div>
 
     <!-- Leaflet JS per Mappa -->
@@ -106,7 +106,7 @@
             "Autista",
             "Operatore",
             "Soccorritore",
-            "4∞ Uomo (Affiancamento)"
+            "4¬∞ Uomo (Affiancamento)"
         ];
 
         let users = [];
@@ -322,7 +322,7 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link ${activeTab === 'disponibilita' ? 'active' : ''}" onclick="switchTab('disponibilita')">
-                            <i class="bi bi-calendar-check me-1"></i> Disponibilit‡
+                            <i class="bi bi-calendar-check me-1"></i> Disponibilit√†
                         </a>
                     </li>
                     <li class="nav-item">
@@ -656,7 +656,7 @@
             }
         }
 
-        // --- SEZIONE DISPONIBILIT¿ ---
+        // --- SEZIONE DISPONIBILIT√Ä ---
         window.renderDisponibilita = function() {
             let listHTML = availabilities.map((a, i) => {
                 const isMine = a.userEmail === loggedUser.email;
@@ -665,7 +665,7 @@
                         <div class="card p-3 border-start border-4 ${isMine ? 'border-success bg-light' : 'border-info'} h-100">
                             <div class="d-flex justify-content-between align-items-center mb-1">
                                 <h6 class="fw-bold mb-0 text-primary">${a.userName}</h6>
-                                ${isMine ? '<span class="badge bg-success">Tua Disponibilit‡</span>' : ''}
+                                ${isMine ? '<span class="badge bg-success">Tua Disponibilit√†</span>' : ''}
                             </div>
                             <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
                             <p class="mb-1"><strong>Fascia Oraria:</strong> ${a.oraInizio} - ${a.oraFine}</p>
@@ -684,11 +684,11 @@
 
             document.getElementById('tabContent').innerHTML = `
                 <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-check me-2"></i>Inserisci la tua Disponibilit‡</h4>
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-check me-2"></i>Inserisci la tua Disponibilit√†</h4>
                     <form onsubmit="addAvailability(event)">
                         <div class="row">
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">Data Disponibilit‡*</label>
+                                <label class="form-label">Data Disponibilit√†*</label>
                                 <input type="date" id="dispData" class="form-control" required>
                             </div>
                             <div class="col-md-4 mb-3">
@@ -704,12 +704,12 @@
                             <label class="form-label">Note / Eventuali limitazioni</label>
                             <input type="text" id="dispNote" class="form-control" placeholder="es. Disponibile solo per servizi AIB">
                         </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-plus-circle me-1"></i>Aggiungi Disponibilit‡</button>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-plus-circle me-1"></i>Aggiungi Disponibilit√†</button>
                     </form>
                 </div>
 
-                <h4 class="fw-bold mb-3">Calendario Disponibilit‡ Operatori (${availabilities.length})</h4>
-                <div class="row">${listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessuna disponibilit‡ comunicata.</div>'}</div>
+                <h4 class="fw-bold mb-3">Calendario Disponibilit√† Operatori (${availabilities.length})</h4>
+                <div class="row">${listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessuna disponibilit√† comunicata.</div>'}</div>
             `;
 
             document.getElementById('dispData').value = new Date().toISOString().split('T')[0];
@@ -728,15 +728,15 @@
 
             try {
                 await addDoc(collection(db, "availabilities"), newDisp);
-                alert('Disponibilit‡ inserita con successo!');
+                alert('Disponibilit√† inserita con successo!');
                 loadCloudData();
             } catch (err) {
-                console.error("Errore disponibilit‡:", err);
+                console.error("Errore disponibilit√†:", err);
             }
         }
 
         window.deleteAvailability = async function(id) {
-            if(confirm("Sei sicuro di voler rimuovere questa disponibilit‡?")) {
+            if(confirm("Sei sicuro di voler rimuovere questa disponibilit√†?")) {
                 try {
                     await deleteDoc(doc(db, "availabilities", id));
                     loadCloudData();
@@ -763,7 +763,7 @@
                         <hr class="my-2">
                         <small class="fw-bold">Squadra Operativa:</small>
                         <ul class="list-unstyled small mt-1 mb-0">
-                            ${hs.volontariDettaglio ? hs.volontariDettaglio.map(v => `<li>ï ${v.nome} (${v.ruoloOperativo})</li>`).join('') : ''}
+                            ${hs.volontariDettaglio ? hs.volontariDettaglio.map(v => `<li>¬ï ${v.nome} (${v.ruoloOperativo})</li>`).join('') : ''}
                         </ul>
                     </div>
                 </div>
@@ -868,7 +868,7 @@
                         <div>
                             ${r.fotoScontrino ? `<img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Scontrino Rifornimento">` : ''}
                             <h5 class="fw-bold mb-1">${r.mezzo}</h5>
-                            <span class="badge bg-warning text-dark mb-2">Ä ${r.importo} (${r.litri} Litri)</span>
+                            <span class="badge bg-warning text-dark mb-2">¬Ä ${r.importo} (${r.litri} Litri)</span>
                             <p class="small text-muted mb-1"><strong>Data / Ora:</strong> ${r.data} - ${r.ora}</p>
                             <p class="small text-muted mb-0"><strong>Registrato da:</strong> ${r.volontario}</p>
                         </div>
@@ -907,7 +907,7 @@
                                 <input type="number" step="0.01" id="refLitri" class="form-control" placeholder="es. 45.5" required>
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">Importo Totale (Ä)*</label>
+                                <label class="form-label">Importo Totale (¬Ä)*</label>
                                 <input type="number" step="0.01" id="refImporto" class="form-control" placeholder="es. 75.00" required>
                             </div>
                         </div>
@@ -920,7 +920,7 @@
                     <div class="row">${historyRefuelsHTML.length > 0 ? historyRefuelsHTML : '<div class="col-12 text-muted">Nessun rifornimento registrato nello storico.</div>'}</div>
                 ` : `
                     <div class="alert alert-info">
-                        <i class="bi bi-info-circle me-2"></i>Puoi inserire liberamente i rifornimenti dei mezzi tramite il modulo sopra. Lo storico completo Ë riservato ai responsabili dell'associazione.
+                        <i class="bi bi-info-circle me-2"></i>Puoi inserire liberamente i rifornimenti dei mezzi tramite il modulo sopra. Lo storico completo √® riservato ai responsabili dell'associazione.
                     </div>
                 `}
             `;
@@ -1004,7 +1004,7 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Note Tecniche (Attacchi, Pressione, Accessibilit‡)</label>
+                            <label class="form-label">Note Tecniche (Attacchi, Pressione, Accessibilit√†)</label>
                             <input type="text" id="wpNote" class="form-control" placeholder="es. Attacco UNI 45">
                         </div>
                         <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva Punto Idrico</button>
@@ -1012,7 +1012,7 @@
                 </div>
                 ` : `
                 <div class="alert alert-info mb-4">
-                    <i class="bi bi-info-circle me-2"></i>La mappa idrica Ë consultabile da tutti i volontari. L'inserimento dei punti Ë riservato al <strong>Responsabile AIB</strong> e al <strong>Responsabile App</strong>.
+                    <i class="bi bi-info-circle me-2"></i>La mappa idrica √® consultabile da tutti i volontari. L'inserimento dei punti √® riservato al <strong>Responsabile AIB</strong> e al <strong>Responsabile App</strong>.
                 </div>
                 `}
 
@@ -1038,7 +1038,7 @@
                     alert("Impossibile rilevare la posizione GPS: " + error.message);
                 });
             } else {
-                alert("La geolocalizzazione non Ë supportata dal browser.");
+                alert("La geolocalizzazione non √® supportata dal browser.");
             }
         }
 
@@ -1149,7 +1149,7 @@
                             <div class="col-md-6 mb-3"><label>Categoria*</label><input type="text" id="matCat" class="form-control" placeholder="es. Attrezzatura AIB, DPI" required></div>
                         </div>
                         <div class="row">
-                            <div class="col-md-6 mb-3"><label>Quantit‡ Iniziale*</label><input type="number" id="matQta" class="form-control" required></div>
+                            <div class="col-md-6 mb-3"><label>Quantit√† Iniziale*</label><input type="number" id="matQta" class="form-control" required></div>
                             <div class="col-md-6 mb-3"><label>Soglia Scorta Minima*</label><input type="number" id="matScorta" class="form-control" required></div>
                         </div>
                         <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva in Magazzino</button>
