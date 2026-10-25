@@ -125,17 +125,14 @@
         let activeTab = 'anagrafica';
         let leafletMap = null;
 
-        // Funzione di utilità per verificare se l'utente è un Super Admin
         function isSuperAdmin() {
             return loggedUser && (loggedUser.ruolo === "Responsabile App" || loggedUser.ruolo === "Responsabile AIB");
         }
 
-        // Funzione di utilità per verificare se l'utente è un Responsabile
         function isManagerRole() {
             return loggedUser && ROLES_MANAGERS.includes(loggedUser.ruolo);
         }
 
-        // Funzione per comprimere le immagini
         function compressImage(file, maxWidth = 800, quality = 0.7) {
             return new Promise((resolve) => {
                 const reader = new FileReader();
@@ -1005,7 +1002,7 @@
             }
         }
 
-        // --- SEZIONE MEZZI ---
+        // --- SEZIONE MEZZI (CON EDITOR COMPLETO) ---
         window.renderMezzi = function() {
             const isAdmin = isSuperAdmin();
 
@@ -1026,9 +1023,13 @@
                             </div>
                         </div>
                         ${isAdmin ? `
-                            <div class="text-end mt-3 border-top pt-2">
-                                <button class="btn btn-sm btn-outline-primary me-1" onclick="updateVehicleKm('${v.id}', ${v.km})">Modifica KM</button>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteVehicle('${v.id}')"><i class="bi bi-trash"></i> Elimina</button>
+                            <div class="d-flex gap-2 mt-3 border-top pt-2">
+                                <button class="btn btn-sm btn-outline-primary w-50 fw-bold" onclick="openVehicleEditor('${v.id}')">
+                                    <i class="bi bi-pencil-square me-1"></i> Modifica Mezzo
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger w-50 fw-bold" onclick="deleteVehicle('${v.id}')">
+                                    <i class="bi bi-trash me-1"></i> Elimina
+                                </button>
                             </div>
                         ` : ''}
                     </div>
@@ -1062,6 +1063,9 @@
 
                 <h4 class="fw-bold mb-3">Parco Mezzi Associazione (${vehicles.length})</h4>
                 <div class="row">${list.length > 0 ? list : '<div class="col-12 text-muted">Nessun mezzo inserito.</div>'}</div>
+
+                <!-- Modale / Sezione Editor Mezzo -->
+                <div id="vehicleEditorContainer"></div>
             `;
         }
 
@@ -1091,16 +1095,69 @@
             }
         }
 
-        window.updateVehicleKm = async function(vId, currentKm) {
-            const newKmInput = prompt("Inserisci i nuovi KM aggiornati del mezzo:", currentKm);
-            if (newKmInput !== null) {
-                const newKm = parseInt(newKmInput, 10);
-                try {
-                    await updateDoc(doc(db, "vehicles", vId), { km: newKm });
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore aggiornamento KM:", err);
+        window.openVehicleEditor = function(vId) {
+            const v = vehicles.find(item => item.id === vId);
+            if (!v) return;
+
+            const editorHTML = `
+                <div class="card p-4 mt-4 border border-primary shadow bg-light" id="editVehicleCard">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-pencil-square me-2"></i>Modifica Mezzo: ${v.modello} (${v.targa})</h4>
+                    <form onsubmit="saveVehicleEdit(event, '${v.id}')">
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Nuova Foto Mezzo (Lascia vuoto per mantenere quella attuale)</label>
+                            <input type="file" id="editVFoto" accept="image/*" class="form-control">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label>Modello Mezzo*</label><input type="text" id="editVModello" class="form-control" value="${v.modello}" required></div>
+                            <div class="col-md-6 mb-3"><label>Targa*</label><input type="text" id="editVTarga" class="form-control" value="${v.targa}" required></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label>Tipologia Mezzo*</label><input type="text" id="editVTipo" class="form-control" value="${v.tipo}" required></div>
+                            <div class="col-md-6 mb-3"><label>Chilometri Attuali*</label><input type="number" id="editVKm" class="form-control" value="${v.km}" required></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3"><label>Scadenza Revisione*</label><input type="date" id="editVRevisione" class="form-control" value="${v.revisione}" required></div>
+                            <div class="col-md-4 mb-3"><label>Scadenza Assicurazione*</label><input type="date" id="editVAssicurazione" class="form-control" value="${v.assicurazione}" required></div>
+                            <div class="col-md-4 mb-3"><label>Scadenza Bollo*</label><input type="date" id="editVBollo" class="form-control" value="${v.bollo}" required></div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary fw-bold w-50"><i class="bi bi-check-circle me-1"></i>Salva Modifiche</button>
+                            <button type="button" class="btn btn-secondary fw-bold w-50" onclick="document.getElementById('editVehicleCard').remove()">Annulla</button>
+                        </div>
+                    </form>
+                </div>
+            `;
+            document.getElementById('vehicleEditorContainer').innerHTML = editorHTML;
+            document.getElementById('editVehicleCard').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        window.saveVehicleEdit = async function(e, vId) {
+            e.preventDefault();
+            const v = vehicles.find(item => item.id === vId);
+            const fotoFile = document.getElementById('editVFoto').files[0];
+
+            try {
+                let fotoUrl = v.foto;
+                if (fotoFile) {
+                    fotoUrl = await compressImage(fotoFile, 600, 0.7);
                 }
+
+                const updatedData = {
+                    modello: document.getElementById('editVModello').value,
+                    targa: document.getElementById('editVTarga').value,
+                    tipo: document.getElementById('editVTipo').value,
+                    km: parseInt(document.getElementById('editVKm').value, 10),
+                    revisione: document.getElementById('editVRevisione').value,
+                    assicurazione: document.getElementById('editVAssicurazione').value,
+                    bollo: document.getElementById('editVBollo').value,
+                    foto: fotoUrl
+                };
+
+                await updateDoc(doc(db, "vehicles", vId), updatedData);
+                alert('Mezzo aggiornato con successo!');
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore salvataggio modifica mezzo:", err);
             }
         }
 
