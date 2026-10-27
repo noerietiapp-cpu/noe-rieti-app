@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
+<!-- Configurazione PWA per installazione su Smartphone -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0d3b66">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="NOE Rieti">
+<link rel="apple-touch-icon" href="logo bianco.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>N.O.E. - Rieti 210 | Protezione Civile</title>
@@ -36,6 +43,13 @@
         .nav-pills .nav-link.active { background-color: #0d3b66 !important; color: white !important; }
         #map { height: 450px; width: 100%; border-radius: 12px; }
     </style>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js')
+      .then(() => console.log("Service Worker registrato con successo!"))
+      .catch((err) => console.log("Errore Service Worker: ", err));
+  }
+</script>
 </head>
 <body>
 
