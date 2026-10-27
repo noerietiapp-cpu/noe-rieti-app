@@ -55,7 +55,7 @@
     </nav>
 
     <div class="container my-4" id="appContainer">
-        <!-- Verr� popolato via JavaScript -->
+        <!-- Verrà popolato via JavaScript -->
     </div>
 
     <!-- Leaflet JS per Mappa -->
@@ -114,7 +114,7 @@
             "Autista",
             "Operatore",
             "Soccorritore",
-            "4� Uomo (Affiancamento)"
+            "4° Uomo (Affiancamento)"
         ];
 
         let users = [];
@@ -133,6 +133,10 @@
 
         function isSuperAdmin() {
             return loggedUser && (loggedUser.ruolo === "Responsabile App" || loggedUser.ruolo === "Responsabile AIB");
+        }
+
+        function isAppCreator() {
+            return loggedUser && loggedUser.ruolo === "Responsabile App";
         }
 
         function isManagerRole() {
@@ -259,7 +263,7 @@
                             <h4 class="mb-3 text-primary fw-bold text-center">Registrazione Volontario</h4>
                             <form onsubmit="handleRegister(event)">
                                 <div class="mb-3">
-                                    <label class="form-label font-weight-bold">Foto Profilo (Obbligatoria)* - Verr� compressa automaticamente</label>
+                                    <label class="form-label font-weight-bold">Foto Profilo (Obbligatoria)* - Verrà compressa automaticamente</label>
                                     <input type="file" id="regFoto" accept="image/*" class="form-control" required>
                                 </div>
                                 <div class="row">
@@ -401,7 +405,7 @@
                         </li>
                         <li class="nav-item">
                             <a class="nav-link ${activeTab === 'disponibilita' ? 'active' : ''}" onclick="switchTab('disponibilita')">
-                                <i class="bi bi-calendar-check me-1"></i> Disponibilit�
+                                <i class="bi bi-calendar-check me-1"></i> Disponibilità
                             </a>
                         </li>
                         <li class="nav-item">
@@ -453,6 +457,7 @@
         window.renderBacheca = function() {
             const canPost = isManagerRole();
             const isAdmin = isSuperAdmin();
+            const isCreator = isAppCreator();
 
             let annHTML = announcements.map((ann) => {
                 let lettiList = ann.lettiDa || [];
@@ -481,6 +486,20 @@
             }).join('');
 
             document.getElementById('tabContent').innerHTML = `
+                ${isCreator ? `
+                <div class="card p-3 mb-4 bg-primary bg-opacity-10 border border-primary">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div>
+                            <h5 class="fw-bold text-primary mb-0"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Pannello Creatore App - Report Completo Mensile</h5>
+                            <small class="text-muted">Download in ordine cronologico di servizi, KM dei mezzi, rifornimenti e letture avvisi</small>
+                        </div>
+                        <button class="btn btn-primary fw-bold" onclick="downloadMonthlyReport()">
+                            <i class="bi bi-download me-1"></i>Scarica Report Mensile Excel
+                        </button>
+                    </div>
+                </div>
+                ` : ''}
+
                 ${canPost ? `
                 <div class="card p-4 mb-4 bg-light border">
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-megaphone me-2"></i>Pubblica Nuovo Avviso in Bacheca</h4>
@@ -506,6 +525,125 @@
                 <div class="row">${announcements.length > 0 ? annHTML : '<div class="col-12 text-muted">Nessun avviso presente in bacheca.</div>'}</div>
             `;
         }
+
+        window.downloadMonthlyReport = function() {
+            const today = new Date();
+            const defaultMonth = String(today.getMonth() + 1).padStart(2, '0') + '/' + today.getFullYear();
+            const inputMonth = prompt("Inserisci il Mese e Anno del report nel formato MM/AAAA:", defaultMonth);
+
+            if (!inputMonth) return;
+
+            const [mStr, yStr] = inputMonth.split('/');
+            const monthInt = parseInt(mStr, 10);
+            const yearInt = parseInt(yStr, 10);
+
+            if (isNaN(monthInt) || isNaN(yearInt) || monthInt < 1 || monthInt > 12) {
+                alert("Formato data non valido! Usa MM/AAAA (es. 10/2026).");
+                return;
+            }
+
+            // Filtro Servizi Storici del Mese
+            let filteredShifts = historyShifts.filter(s => {
+                if (!s.data) return false;
+                const parts = s.data.split('-');
+                if (parts.length === 3) {
+                    const year = parseInt(parts[0], 10);
+                    const month = parseInt(parts[1], 10);
+                    return year === yearInt && month === monthInt;
+                }
+                return false;
+            });
+
+            // Ordina Cronologicamente
+            filteredShifts.sort((a, b) => a.data.localeCompare(b.data) || a.oraInizio.localeCompare(b.oraInizio));
+
+            // Filtro Rifornimenti del Mese
+            let filteredRefuels = refuels.filter(r => {
+                if (!r.data) return false;
+                const parts = r.data.split('-');
+                if (parts.length === 3) {
+                    const year = parseInt(parts[0], 10);
+                    const month = parseInt(parts[1], 10);
+                    return year === yearInt && month === monthInt;
+                }
+                return false;
+            });
+            filteredRefuels.sort((a, b) => a.data.localeCompare(b.data) || a.ora.localeCompare(b.ora));
+
+            // Calcolo KM totali per Mezzo nel Mese
+            let kmPerVehicle = {};
+            filteredShifts.forEach(s => {
+                if (s.mezzoUsato && s.mezzoUsato !== "Nessun Mezzo") {
+                    kmPerVehicle[s.mezzoUsato] = (kmPerVehicle[s.mezzoUsato] || 0) + (s.kmPercorsi || 0);
+                }
+            });
+
+            // Costruzione File CSV (Apertura nativa con Excel)
+            let csvContent = "\uFEFF"; // BOM per caratteri speciali UTF-8
+            csvContent += `REPORT MENSILE COMPLETO ATIVITA' N.O.E. RIETI 210 - MESE: ${inputMonth}\n\n`;
+
+            // SEZIONE 1: SERVIZI E TURNI
+            csvContent += "=== 1. STORICO SERVIZI E TURNI SVOLTI IN ORDINE CRONOLOGICO ===\n";
+            csvContent += "Data;Ora Inizio;Ora Fine;Tipo Servizio;Mezzo Utilizzato;KM Percorsi;Note;Squadra Operativa\n";
+
+            if (filteredShifts.length === 0) {
+                csvContent += "Nessun servizio registrato nel mese selezionato;;;;;;;\n";
+            } else {
+                filteredShifts.forEach(s => {
+                    let squadraStr = s.volontariDettaglio ? s.volontariDettaglio.map(v => `${v.nome} (${v.ruoloOperativo})`).join(" | ") : "";
+                    csvContent += `"${s.data}";"${s.oraInizio}";"${s.oraFine}";"${s.tipoServizio}";"${s.mezzoUsato || 'Nessuno'}";"${s.kmPercorsi || 0}";"${s.note || ''}";"${squadraStr}"\n`;
+                });
+            }
+
+            // SEZIONE 2: CONTEGGIO KM PER MEZZO
+            csvContent += "\n=== 2. CONTEGGIO TOTALE KM PERCORSI PER CIASCUN MEZZO NEL MESE ===\n";
+            csvContent += "Mezzo;KM Totali Effettuati nel Mese\n";
+            let vehicleKeys = Object.keys(kmPerVehicle);
+            if (vehicleKeys.length === 0) {
+                csvContent += "Nessun chilometraggio registrato per i mezzi;;;\n";
+            } else {
+                vehicleKeys.forEach(vk => {
+                    csvContent += `"${vk}";"${kmPerVehicle[vk]} KM"\n`;
+                });
+            }
+
+            // SEZIONE 3: RIFORNIMENTI
+            csvContent += "\n=== 3. STORICO RIFORNIMENTI EFFETTUATI NEL MESE ===\n";
+            csvContent += "Data;Ora;Mezzo;Litri Inseriti;Importo Totale (€);Volontario Registrante\n";
+
+            if (filteredRefuels.length === 0) {
+                csvContent += "Nessun rifornimento registrato nel mese selezionato;;;;;\n";
+            } else {
+                filteredRefuels.forEach(r => {
+                    csvContent += `"${r.data}";"${r.ora}";"${r.mezzo}";"${r.litri}";"${r.importo}";"${r.volontario}"\n`;
+                });
+            }
+
+            // SEZIONE 4: AVVISI IN BACHECA E LETTURE
+            csvContent += "\n=== 4. STORICO COMUNICATI IN BACHECA E REGISTRO LETTURE ===\n";
+            csvContent += "Data Pubblicazione;Titolo Avviso;Autore;Volontari Che Hanno Visto L'Avviso (Nome e Data/Ora)\n";
+
+            if (announcements.length === 0) {
+                csvContent += "Nessun avviso presente in bacheca;;;\n";
+            } else {
+                announcements.forEach(a => {
+                    let lettiList = a.lettiDa || [];
+                    let lettiStr = lettiList.map(l => `${l.nome} (${l.dataOra})`).join(" | ");
+                    csvContent += `"${a.data}";"${a.titolo}";"${a.autore}";"${lettiStr || 'Nessuna lettura registrata'}"\n`;
+                });
+            }
+
+            // Download File
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Report_NOE_Rieti_${mStr}_${yStr}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            alert(`Report mensile (${inputMonth}) generato e scaricato con successo!`);
+        };
 
         window.addAnnouncement = async function(e) {
             e.preventDefault();
@@ -906,7 +1044,7 @@
             }
         }
 
-        // --- SEZIONE DISPONIBILIT� ---
+        // --- SEZIONE DISPONIBILITÀ ---
         window.renderDisponibilita = function() {
             const isAdmin = isSuperAdmin();
 
@@ -918,7 +1056,7 @@
                             <div>
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <h6 class="fw-bold mb-0 text-primary">${a.userName}</h6>
-                                    ${isMine ? '<span class="badge bg-success">Tua Disponibilit�</span>' : ''}
+                                    ${isMine ? '<span class="badge bg-success">Tua Disponibilità</span>' : ''}
                                 </div>
                                 <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
                                 <p class="mb-1"><strong>Fascia Oraria:</strong> ${a.oraInizio} - ${a.oraFine}</p>
@@ -938,11 +1076,11 @@
 
             document.getElementById('tabContent').innerHTML = `
                 <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-check me-2"></i>Inserisci la tua Disponibilit�</h4>
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-check me-2"></i>Inserisci la tua Disponibilità</h4>
                     <form onsubmit="addAvailability(event)">
                         <div class="row">
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">Data Disponibilit�*</label>
+                                <label class="form-label">Data Disponibilità*</label>
                                 <input type="date" id="dispData" class="form-control" required>
                             </div>
                             <div class="col-md-4 mb-3">
@@ -958,12 +1096,12 @@
                             <label class="form-label">Note / Eventuali limitazioni</label>
                             <input type="text" id="dispNote" class="form-control" placeholder="es. Disponibile solo per servizi AIB">
                         </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-plus-circle me-1"></i>Aggiungi Disponibilit�</button>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-plus-circle me-1"></i>Aggiungi Disponibilità</button>
                     </form>
                 </div>
 
-                <h4 class="fw-bold mb-3">Calendario Disponibilit� Operatori (${availabilities.length})</h4>
-                <div class="row">${listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessuna disponibilit� comunicata.</div>'}</div>
+                <h4 class="fw-bold mb-3">Calendario Disponibilità Operatori (${availabilities.length})</h4>
+                <div class="row">${listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessuna disponibilità comunicata.</div>'}</div>
             `;
 
             document.getElementById('dispData').value = new Date().toISOString().split('T')[0];
@@ -982,15 +1120,15 @@
 
             try {
                 await addDoc(collection(db, "availabilities"), newDisp);
-                alert('Disponibilit� inserita con successo!');
+                alert('Disponibilità inserita con successo!');
                 loadCloudData();
             } catch (err) {
-                console.error("Errore disponibilit�:", err);
+                console.error("Errore disponibilità:", err);
             }
         }
 
         window.deleteAvailability = async function(id) {
-            if(confirm("Sei sicuro di voler rimuovere questa disponibilit�?")) {
+            if(confirm("Sei sicuro di voler rimuovere questa disponibilità?")) {
                 try {
                     await deleteDoc(doc(db, "availabilities", id));
                     loadCloudData();
@@ -1020,7 +1158,7 @@
                             <hr class="my-2">
                             <small class="fw-bold">Squadra Operativa:</small>
                             <ul class="list-unstyled small mt-1 mb-0">
-                                ${hs.volontariDettaglio ? hs.volontariDettaglio.map(v => `<li>� ${v.nome} (${v.ruoloOperativo})</li>`).join('') : ''}
+                                ${hs.volontariDettaglio ? hs.volontariDettaglio.map(v => `<li>• ${v.nome} (${v.ruoloOperativo})</li>`).join('') : ''}
                             </ul>
                         </div>
                         ${isAdmin ? `
@@ -1090,7 +1228,7 @@
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-plus-circle me-2"></i>Inserimento Nuovo Mezzo</h4>
                     <form onsubmit="addVehicle(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto del Mezzo (Obbligatoria)* - Verr� compressa automaticamente</label>
+                            <label class="form-label fw-bold">Foto del Mezzo (Obbligatoria)* - Verrà compressa automaticamente</label>
                             <input type="file" id="vFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
@@ -1234,7 +1372,7 @@
                         <div>
                             ${r.fotoScontrino ? `<img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Scontrino Rifornimento">` : ''}
                             <h5 class="fw-bold mb-1">${r.mezzo}</h5>
-                            <span class="badge bg-warning text-dark mb-2">� ${r.importo} (${r.litri} Litri)</span>
+                            <span class="badge bg-warning text-dark mb-2">€ ${r.importo} (${r.litri} Litri)</span>
                             <p class="small text-muted mb-1"><strong>Data / Ora:</strong> ${r.data} - ${r.ora}</p>
                             <p class="small text-muted mb-0"><strong>Registrato da:</strong> ${r.volontario}</p>
                         </div>
@@ -1254,7 +1392,7 @@
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-fuel-pump me-2"></i>Registra Nuovo Rifornimento</h4>
                     <form onsubmit="addRefuel(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto dello Scontrino (Obbligatoria)* - Verr� compressa automaticamente</label>
+                            <label class="form-label fw-bold">Foto dello Scontrino (Obbligatoria)* - Verrà compressa automaticamente</label>
                             <input type="file" id="refFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
@@ -1280,7 +1418,7 @@
                                 <input type="number" step="0.01" id="refLitri" class="form-control" placeholder="es. 45.5" required>
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">Importo Totale (�)*</label>
+                                <label class="form-label">Importo Totale (€)*</label>
                                 <input type="number" step="0.01" id="refImporto" class="form-control" placeholder="es. 75.00" required>
                             </div>
                         </div>
@@ -1293,7 +1431,7 @@
                     <div class="row">${historyRefuelsHTML.length > 0 ? historyRefuelsHTML : '<div class="col-12 text-muted">Nessun rifornimento registrato nello storico.</div>'}</div>
                 ` : `
                     <div class="alert alert-info">
-                        <i class="bi bi-info-circle me-2"></i>Puoi inserire liberamente i rifornimenti dei mezzi tramite il modulo sopra. Lo storico completo � riservato ai responsabili dell'associazione.
+                        <i class="bi bi-info-circle me-2"></i>Puoi inserire liberamente i rifornimenti dei mezzi tramite il modulo sopra. Lo storico completo è riservato ai responsabili dell'associazione.
                     </div>
                 `}
             `;
@@ -1347,7 +1485,7 @@
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-geo-alt-fill me-2"></i>Aggiungi Punto Rifornimento Idrico</h4>
                     <form onsubmit="addWaterPoint(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto del Punto Idrico (Obbligatoria)* - Verr� compressa automaticamente</label>
+                            <label class="form-label fw-bold">Foto del Punto Idrico (Obbligatoria)* - Verrà compressa automaticamente</label>
                             <input type="file" id="wpFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
@@ -1382,7 +1520,7 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Note Tecniche (Attacchi, Pressione, Accessibilit�)</label>
+                            <label class="form-label">Note Tecniche (Attacchi, Pressione, Accessibilità)</label>
                             <input type="text" id="wpNote" class="form-control" placeholder="es. Attacco UNI 45">
                         </div>
                         <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva Punto Idrico</button>
@@ -1390,7 +1528,7 @@
                 </div>
                 ` : `
                 <div class="alert alert-info mb-4">
-                    <i class="bi bi-info-circle me-2"></i>La mappa idrica � consultabile da tutti i volontari. L'inserimento dei punti � riservato al <strong>Responsabile AIB</strong> e al <strong>Responsabile App</strong>.
+                    <i class="bi bi-info-circle me-2"></i>La mappa idrica è consultabile da tutti i volontari. L'inserimento dei punti è riservato al <strong>Responsabile AIB</strong> e al <strong>Responsabile App</strong>.
                 </div>
                 `}
 
@@ -1416,7 +1554,7 @@
                     alert("Impossibile rilevare la posizione GPS: " + error.message);
                 });
             } else {
-                alert("La geolocalizzazione non � supportata dal browser.");
+                alert("La geolocalizzazione non è supportata dal browser.");
             }
         }
 
@@ -1433,178 +1571,4 @@
             }).addTo(leafletMap);
 
             waterPoints.forEach(wp => {
-                const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`;
-                const popupContent = `
-                    <div style="max-width: 200px;">
-                        ${wp.foto ? `<img src="${wp.foto}" style="width:100%; height:100px; object-fit:cover; border-radius:4px; margin-bottom:5px;">` : ''}
-                        <h6><strong>${wp.nome}</strong></h6>
-                        <p style="font-size:12px; margin-bottom:5px;">${wp.tipo}<br>${wp.note || ''}</p>
-                        <a href="${navUrl}" target="_blank" class="btn btn-sm btn-primary w-100 text-white fw-bold">
-                            <i class="bi bi-compass me-1"></i> Apri Google Maps
-                        </a>
-                    </div>
-                `;
-                L.marker([wp.lat, wp.lng]).addTo(leafletMap).bindPopup(popupContent);
-            });
-        }
-
-        window.renderWaterPointsList = function() {
-            const isAdmin = isSuperAdmin();
-
-            let listHTML = waterPoints.map((wp) => {
-                const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`;
-                return `
-                    <div class="col-md-4 mb-3">
-                        <div class="card p-3 h-100 d-flex flex-column justify-content-between">
-                            <div>
-                                ${wp.foto ? `<img src="${wp.foto}" class="hydrant-img mb-2" alt="Foto Punto Idrico">` : ''}
-                                <h5 class="fw-bold mb-1">${wp.nome}</h5>
-                                <span class="badge bg-info mb-2">${wp.tipo}</span>
-                                <p class="small text-muted mb-1"><strong>Coordinate:</strong> ${wp.lat}, ${wp.lng}</p>
-                                <p class="small text-muted mb-2"><strong>Note:</strong> ${wp.note || 'Nessuna nota'}</p>
-                            </div>
-                            <div>
-                                <a href="${navUrl}" target="_blank" class="btn btn-primary btn-sm w-100 fw-bold mt-2">
-                                    <i class="bi bi-compass me-1"></i> Naviga su Google Maps
-                                </a>
-                                ${isAdmin ? `
-                                    <button class="btn btn-outline-danger btn-sm w-100 mt-2" onclick="deleteWaterPoint('${wp.id}')">
-                                        <i class="bi bi-trash"></i> Elimina Punto
-                                    </button>
-                                ` : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            document.getElementById('waterPointsList').innerHTML = listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessun punto idrico mappato.</div>';
-        }
-
-        window.addWaterPoint = async function(e) {
-            e.preventDefault();
-            const fotoFile = document.getElementById('wpFoto').files[0];
-            if (!fotoFile) return;
-
-            try {
-                const compressedDataUrl = await compressImage(fotoFile, 600, 0.7);
-                const newWp = {
-                    nome: document.getElementById('wpNome').value,
-                    tipo: document.getElementById('wpTipo').value,
-                    lat: parseFloat(document.getElementById('wpLat').value),
-                    lng: parseFloat(document.getElementById('wpLng').value),
-                    note: document.getElementById('wpNote').value,
-                    foto: compressedDataUrl
-                };
-
-                await addDoc(collection(db, "waterPoints"), newWp);
-                alert('Punto idrico aggiunto correttamente!');
-                loadCloudData();
-            } catch (err) {
-                console.error("Errore punto idrico:", err);
-            }
-        }
-
-        window.deleteWaterPoint = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questo punto idrico?")) {
-                try {
-                    await deleteDoc(doc(db, "waterPoints", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione punto idrico:", err);
-                }
-            }
-        }
-
-        // --- SEZIONE MAGAZZINO ---
-        window.renderMagazzino = function() {
-            const isAdmin = isSuperAdmin();
-
-            let list = inventory.map((item) => `
-                <div class="col-md-4 mb-3">
-                    <div class="card p-3 text-center h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            <h5 class="fw-bold">${item.nome}</h5>
-                            <p class="text-muted small mb-1">Categoria: ${item.cat}</p>
-                            <h2 class="display-6 fw-bold text-primary my-2">${item.qta}</h2>
-                            <p class="text-muted small">Scorta Minima: ${item.scortaMin}</p>
-                            <div class="btn-group mb-2">
-                                <button class="btn btn-outline-danger btn-sm" onclick="updateStock('${item.id}', ${item.qta}, -1)">-1</button>
-                                <button class="btn btn-outline-success btn-sm" onclick="updateStock('${item.id}', ${item.qta}, 1)">+1</button>
-                            </div>
-                        </div>
-                        ${isAdmin ? `
-                            <div class="border-top pt-2">
-                                <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteInventoryItem('${item.id}')">
-                                    <i class="bi bi-trash"></i> Elimina Articolo
-                                </button>
-                            </div>
-                        ` : ''}
-                    </div>
-                </div>
-            `).join('');
-
-            document.getElementById('tabContent').innerHTML = `
-                <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-box-seam me-2"></i>Inserimento Attrezzatura / Materiale</h4>
-                    <form onsubmit="addMaterial(event)">
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label>Nome Attrezzatura/Materiale*</label><input type="text" id="matNome" class="form-control" placeholder="es. Gruppo Elettrogeno 5kW" required></div>
-                            <div class="col-md-6 mb-3"><label>Categoria*</label><input type="text" id="matCat" class="form-control" placeholder="es. Attrezzatura AIB, DPI" required></div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label>Quantit� Iniziale*</label><input type="number" id="matQta" class="form-control" required></div>
-                            <div class="col-md-6 mb-3"><label>Soglia Scorta Minima*</label><input type="number" id="matScorta" class="form-control" required></div>
-                        </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva in Magazzino</button>
-                    </form>
-                </div>
-
-                <h4 class="fw-bold mb-3">Attrezzature e Magazzino (${inventory.length})</h4>
-                <div class="row">${list.length > 0 ? list : '<div class="col-12 text-muted">Nessuna attrezzatura inserita.</div>'}</div>
-            `;
-        }
-
-        window.addMaterial = async function(e) {
-            e.preventDefault();
-            const newItem = {
-                nome: document.getElementById('matNome').value,
-                cat: document.getElementById('matCat').value,
-                qta: parseInt(document.getElementById('matQta').value, 10),
-                scortaMin: parseInt(document.getElementById('matScorta').value, 10)
-            };
-
-            try {
-                await addDoc(collection(db, "inventory"), newItem);
-                alert('Attrezzatura aggiunta!');
-                loadCloudData();
-            } catch (err) {
-                console.error("Errore magazzino:", err);
-            }
-        }
-
-        window.updateStock = async function(itemId, currentQta, change) {
-            const newQta = Math.max(0, currentQta + change);
-            try {
-                await updateDoc(doc(db, "inventory", itemId), { qta: newQta });
-                loadCloudData();
-            } catch (err) {
-                console.error("Errore stock:", err);
-            }
-        }
-
-        window.deleteInventoryItem = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questo articolo dal magazzino?")) {
-                try {
-                    await deleteDoc(doc(db, "inventory", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione magazzino:", err);
-                }
-            }
-        }
-
-        loadCloudData();
-    </script>
-</body>
-</html>
+                const navUrl =
