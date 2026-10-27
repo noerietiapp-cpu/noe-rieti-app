@@ -47,8 +47,10 @@
                     </div>
                 </div>
             </span>
-            <div id="userInfo" class="d-none align-items-center">
-                <span class="badge badge-role me-2" id="userRoleBadge"></span>
+            <div id="userInfo" class="d-none align-items-center gap-2">
+                <!-- Pulsante Report Creatore App posizionato nell'area richiesta -->
+                <div id="creatorReportBtnContainer"></div>
+                <span class="badge badge-role" id="userRoleBadge"></span>
                 <button class="btn btn-outline-light btn-sm" onclick="logout()">Esci</button>
             </div>
         </div>
@@ -128,7 +130,7 @@
         let refuels = [];
         let announcements = [];
 
-        let activeTab = 'anagrafica';
+        let activeTab = 'bacheca';
         let leafletMap = null;
 
         function isSuperAdmin() {
@@ -213,6 +215,19 @@
                 document.getElementById('userInfo').classList.remove('d-none');
                 document.getElementById('userInfo').classList.add('d-flex');
                 document.getElementById('userRoleBadge').innerText = loggedUser.ruolo;
+
+                // Mostra il pulsante report in alto solo se è il Responsabile App
+                const creatorContainer = document.getElementById('creatorReportBtnContainer');
+                if (isAppCreator()) {
+                    creatorContainer.innerHTML = `
+                        <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="downloadMonthlyReport()" title="Scarica Report Mensile Excel">
+                            <i class="bi bi-file-earmark-arrow-down-fill me-1"></i> Report Excel
+                        </button>
+                    `;
+                } else {
+                    creatorContainer.innerHTML = '';
+                }
+
                 renderMainView();
             }
         }
@@ -457,7 +472,6 @@
         window.renderBacheca = function() {
             const canPost = isManagerRole();
             const isAdmin = isSuperAdmin();
-            const isCreator = isAppCreator();
 
             let annHTML = announcements.map((ann) => {
                 let lettiList = ann.lettiDa || [];
@@ -486,20 +500,6 @@
             }).join('');
 
             document.getElementById('tabContent').innerHTML = `
-                ${isCreator ? `
-                <div class="card p-3 mb-4 bg-primary bg-opacity-10 border border-primary">
-                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div>
-                            <h5 class="fw-bold text-primary mb-0"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Pannello Creatore App - Report Completo Mensile</h5>
-                            <small class="text-muted">Download in ordine cronologico di servizi, KM dei mezzi, rifornimenti e letture avvisi</small>
-                        </div>
-                        <button class="btn btn-primary fw-bold" onclick="downloadMonthlyReport()">
-                            <i class="bi bi-download me-1"></i>Scarica Report Mensile Excel
-                        </button>
-                    </div>
-                </div>
-                ` : ''}
-
                 ${canPost ? `
                 <div class="card p-4 mb-4 bg-light border">
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-megaphone me-2"></i>Pubblica Nuovo Avviso in Bacheca</h4>
@@ -542,7 +542,6 @@
                 return;
             }
 
-            // Filtro Servizi Storici del Mese
             let filteredShifts = historyShifts.filter(s => {
                 if (!s.data) return false;
                 const parts = s.data.split('-');
@@ -553,11 +552,8 @@
                 }
                 return false;
             });
-
-            // Ordina Cronologicamente
             filteredShifts.sort((a, b) => a.data.localeCompare(b.data) || a.oraInizio.localeCompare(b.oraInizio));
 
-            // Filtro Rifornimenti del Mese
             let filteredRefuels = refuels.filter(r => {
                 if (!r.data) return false;
                 const parts = r.data.split('-');
@@ -570,7 +566,6 @@
             });
             filteredRefuels.sort((a, b) => a.data.localeCompare(b.data) || a.ora.localeCompare(b.ora));
 
-            // Calcolo KM totali per Mezzo nel Mese
             let kmPerVehicle = {};
             filteredShifts.forEach(s => {
                 if (s.mezzoUsato && s.mezzoUsato !== "Nessun Mezzo") {
@@ -578,11 +573,9 @@
                 }
             });
 
-            // Costruzione File CSV (Apertura nativa con Excel)
-            let csvContent = "\uFEFF"; // BOM per caratteri speciali UTF-8
+            let csvContent = "\uFEFF";
             csvContent += `REPORT MENSILE COMPLETO ATIVITA' N.O.E. RIETI 210 - MESE: ${inputMonth}\n\n`;
 
-            // SEZIONE 1: SERVIZI E TURNI
             csvContent += "=== 1. STORICO SERVIZI E TURNI SVOLTI IN ORDINE CRONOLOGICO ===\n";
             csvContent += "Data;Ora Inizio;Ora Fine;Tipo Servizio;Mezzo Utilizzato;KM Percorsi;Note;Squadra Operativa\n";
 
@@ -595,7 +588,6 @@
                 });
             }
 
-            // SEZIONE 2: CONTEGGIO KM PER MEZZO
             csvContent += "\n=== 2. CONTEGGIO TOTALE KM PERCORSI PER CIASCUN MEZZO NEL MESE ===\n";
             csvContent += "Mezzo;KM Totali Effettuati nel Mese\n";
             let vehicleKeys = Object.keys(kmPerVehicle);
@@ -607,7 +599,6 @@
                 });
             }
 
-            // SEZIONE 3: RIFORNIMENTI
             csvContent += "\n=== 3. STORICO RIFORNIMENTI EFFETTUATI NEL MESE ===\n";
             csvContent += "Data;Ora;Mezzo;Litri Inseriti;Importo Totale (€);Volontario Registrante\n";
 
@@ -619,7 +610,6 @@
                 });
             }
 
-            // SEZIONE 4: AVVISI IN BACHECA E LETTURE
             csvContent += "\n=== 4. STORICO COMUNICATI IN BACHECA E REGISTRO LETTURE ===\n";
             csvContent += "Data Pubblicazione;Titolo Avviso;Autore;Volontari Che Hanno Visto L'Avviso (Nome e Data/Ora)\n";
 
@@ -633,7 +623,6 @@
                 });
             }
 
-            // Download File
             const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
@@ -1571,4 +1560,125 @@
             }).addTo(leafletMap);
 
             waterPoints.forEach(wp => {
-                const navUrl =
+                const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`;
+                const popupContent = `
+                    <div style="max-width: 200px;">
+                        ${wp.foto ? `<img src="${wp.foto}" style="width:100%; height:100px; object-fit:cover; border-radius:4px; margin-bottom:5px;">` : ''}
+                        <h6><strong>${wp.nome}</strong></h6>
+                        <p style="font-size:12px; margin-bottom:5px;">${wp.tipo}<br>${wp.note || ''}</p>
+                        <a href="${navUrl}" target="_blank" class="btn btn-sm btn-primary w-100 text-white fw-bold">
+                            <i class="bi bi-compass me-1"></i> Apri Google Maps
+                        </a>
+                    </div>
+                `;
+                L.marker([wp.lat, wp.lng]).addTo(leafletMap).bindPopup(popupContent);
+            });
+        }
+
+        window.renderWaterPointsList = function() {
+            const isAdmin = isSuperAdmin();
+
+            let listHTML = waterPoints.map((wp) => {
+                const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`;
+                return `
+                    <div class="col-md-4 mb-3">
+                        <div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                            <div>
+                                ${wp.foto ? `<img src="${wp.foto}" class="hydrant-img mb-2" alt="Foto Punto Idrico">` : ''}
+                                <h5 class="fw-bold mb-1">${wp.nome}</h5>
+                                <span class="badge bg-info mb-2">${wp.tipo}</span>
+                                <p class="small text-muted mb-1"><strong>Coordinate:</strong> ${wp.lat}, ${wp.lng}</p>
+                                <p class="small text-muted mb-2"><strong>Note:</strong> ${wp.note || 'Nessuna nota'}</p>
+                            </div>
+                            <div>
+                                <a href="${navUrl}" target="_blank" class="btn btn-primary btn-sm w-100 fw-bold mt-2">
+                                    <i class="bi bi-compass me-1"></i> Naviga su Google Maps
+                                </a>
+                                ${isAdmin ? `
+                                    <button class="btn btn-outline-danger btn-sm w-100 mt-2" onclick="deleteWaterPoint('${wp.id}')">
+                                        <i class="bi bi-trash"></i> Elimina Punto
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            document.getElementById('waterPointsList').innerHTML = listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessun punto idrico mappato.</div>';
+        }
+
+        window.addWaterPoint = async function(e) {
+            e.preventDefault();
+            const fotoFile = document.getElementById('wpFoto').files[0];
+            if (!fotoFile) return;
+
+            try {
+                const compressedDataUrl = await compressImage(fotoFile, 600, 0.7);
+                const newWp = {
+                    nome: document.getElementById('wpNome').value,
+                    tipo: document.getElementById('wpTipo').value,
+                    lat: parseFloat(document.getElementById('wpLat').value),
+                    lng: parseFloat(document.getElementById('wpLng').value),
+                    note: document.getElementById('wpNote').value,
+                    foto: compressedDataUrl
+                };
+
+                await addDoc(collection(db, "waterPoints"), newWp);
+                alert('Punto idrico aggiunto correttamente!');
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore punto idrico:", err);
+            }
+        }
+
+        window.deleteWaterPoint = async function(id) {
+            if (confirm("Sei sicuro di voler eliminare questo punto idrico?")) {
+                try {
+                    await deleteDoc(doc(db, "waterPoints", id));
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore eliminazione punto idrico:", err);
+                }
+            }
+        }
+
+        // --- SEZIONE MAGAZZINO ---
+        window.renderMagazzino = function() {
+            const isAdmin = isSuperAdmin();
+
+            let list = inventory.map((item) => `
+                <div class="col-md-4 mb-3">
+                    <div class="card p-3 text-center h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <h5 class="fw-bold">${item.nome}</h5>
+                            <p class="text-muted small mb-1">Categoria: ${item.cat}</p>
+                            <h2 class="display-6 fw-bold text-primary my-2">${item.qta}</h2>
+                            <p class="text-muted small">Scorta Minima: ${item.scortaMin}</p>
+                            <div class="btn-group mb-2">
+                                <button class="btn btn-outline-danger btn-sm" onclick="updateStock('${item.id}', ${item.qta}, -1)">-1</button>
+                                <button class="btn btn-outline-success btn-sm" onclick="updateStock('${item.id}', ${item.qta}, 1)">+1</button>
+                            </div>
+                        </div>
+                        ${isAdmin ? `
+                            <div class="border-top pt-2">
+                                <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteInventoryItem('${item.id}')">
+                                    <i class="bi bi-trash"></i> Elimina Articolo
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('tabContent').innerHTML = `
+                <div class="card p-4 mb-4">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-box-seam me-2"></i>Inserimento Attrezzatura / Materiale</h4>
+                    <form onsubmit="addMaterial(event)">
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label>Nome Attrezzatura/Materiale*</label><input type="text" id="matNome" class="form-control" placeholder="es. Gruppo Elettrogeno 5kW" required></div>
+                            <div class="col-md-6 mb-3"><label>Categoria*</label><input type="text" id="matCat" class="form-control" placeholder="es. Attrezzatura AIB, DPI" required></div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label>Quantità Iniziale*</label><input type="number" id="matQta" class="form-control" required></div>
+                            <div class="col-md-6 mb-3"><label>Soglia Scorta Minima*</label><input type="number" id="matScorta" class="form-control" required
