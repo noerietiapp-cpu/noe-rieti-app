@@ -19,6 +19,9 @@
         body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .bg-pc-header { background: linear-gradient(135deg, #0d3b66 0%, #1d4e89 100%); color: white; z-index: 1030; }
         .sticky-menu-bar { position: sticky; top: 56px; z-index: 1020; background-color: #f8f9fa; padding-top: 10px; padding-bottom: 10px; }
+        /* Menu fisso e ordinato su un'unica riga statica */
+        .fixed-menu-container { display: flex; flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; gap: 5px; }
+        .fixed-menu-container .nav-item { flex: 0 0 auto; }
         .btn-pc { background-color: var(--pc-blue); color: white; }
         .btn-pc:hover { background-color: #082642; color: white; }
         .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -400,7 +403,7 @@
                 </div>
 
                 <div class="sticky-menu-bar shadow-sm rounded mb-4">
-                    <ul class="nav nav-pills nav-fill bg-white p-2 rounded border flex-wrap gap-1">
+                    <ul class="nav nav-pills fixed-menu-container bg-white p-2 rounded border">
                         <li class="nav-item">
                             <a class="nav-link ${activeTab === 'bacheca' ? 'active' : ''}" onclick="switchTab('bacheca')">
                                 <i class="bi bi-megaphone-fill me-1"></i> Bacheca Avvisi ${bachecaBadge}
@@ -621,7 +624,7 @@ window.downloadWordReport = function() {
 
                     <div class="sub-header">
                         <strong>VERBALE OPERATIVO E DI RIGUARDO MENSILE</strong><br>
-                        PERIODO DI RIFERIMENTO: <u>${inputMonth}</u> &bull; PROTOCOLLO INTERNO DI SERVIZ
+                        PERIODO DI RIFERIMENTO: <u>${inputMonth}</u> &bull; PROTOCOLLO INTERNO DI SERVIZIO
                     </div>
 
                     <h2>1. RIEPILOGO SINTETICO ATTIVITÀ OPERATIVE</h2>
@@ -632,7 +635,7 @@ window.downloadWordReport = function() {
                         <strong>- Comunicati ed Ordini di Servizio in Bacheca:</strong> ${announcements.length} attivi
                     </div>
 
-                    <h2>2. REGISTRO DETTAGLIATO TURNI E SERVIZI svolti</h2>
+                    <h2>2. REGISTRO DETTAGLIATO TURNI E SERVIZI SVOLTI</h2>
                     <table class="data-table">
                         <thead>
                             <tr>
