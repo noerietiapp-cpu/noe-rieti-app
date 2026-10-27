@@ -48,7 +48,7 @@
                 </div>
             </span>
             <div id="userInfo" class="d-none align-items-center gap-2">
-                <!-- Pulsante Report Creatore App posizionato nell'area richiesta -->
+                <!-- Pulsante Report Creatore App posizionato nell'area superiore richiesta -->
                 <div id="creatorReportBtnContainer"></div>
                 <span class="badge badge-role" id="userRoleBadge"></span>
                 <button class="btn btn-outline-light btn-sm" onclick="logout()">Esci</button>
@@ -216,7 +216,6 @@
                 document.getElementById('userInfo').classList.add('d-flex');
                 document.getElementById('userRoleBadge').innerText = loggedUser.ruolo;
 
-                // Mostra il pulsante report in alto solo se è il Responsabile App
                 const creatorContainer = document.getElementById('creatorReportBtnContainer');
                 if (isAppCreator()) {
                     creatorContainer.innerHTML = `
@@ -1667,18 +1666,3 @@
                                 </button>
                             </div>
                         ` : ''}
-                    </div>
-                </div>
-            `).join('');
-
-            document.getElementById('tabContent').innerHTML = `
-                <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-box-seam me-2"></i>Inserimento Attrezzatura / Materiale</h4>
-                    <form onsubmit="addMaterial(event)">
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label>Nome Attrezzatura/Materiale*</label><input type="text" id="matNome" class="form-control" placeholder="es. Gruppo Elettrogeno 5kW" required></div>
-                            <div class="col-md-6 mb-3"><label>Categoria*</label><input type="text" id="matCat" class="form-control" placeholder="es. Attrezzatura AIB, DPI" required></div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label>Quantità Iniziale*</label><input type="number" id="matQta" class="form-control" required></div>
-                            <div class="col-md-6 mb-3"><label>Soglia Scorta Minima*</label><input type="number" id="matScorta" class="form-control" required
