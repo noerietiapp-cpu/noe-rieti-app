@@ -17,7 +17,8 @@
             --pc-accent: #e63946;
         }
         body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .bg-pc-header { background: linear-gradient(135deg, #0d3b66 0%, #1d4e89 100%); color: white; }
+        .bg-pc-header { background: linear-gradient(135deg, #0d3b66 0%, #1d4e89 100%); color: white; z-index: 1030; }
+        .sticky-menu-bar { position: sticky; top: 56px; z-index: 1020; background-color: #f8f9fa; padding-top: 10px; padding-bottom: 10px; }
         .btn-pc { background-color: var(--pc-blue); color: white; }
         .btn-pc:hover { background-color: #082642; color: white; }
         .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -39,7 +40,12 @@
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1 d-flex align-items-center text-white">
                 <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-header" onerror="this.style.display='none'">
-                <span>N.O.E. - Rieti (Cod. 210) - Cloud Sync</span>
+                <div>
+                    <span style="font-size: 1.1rem; font-weight: bold;">N.O.E. - Rieti (Cod. 210)</span>
+                    <div style="font-size: 0.75rem; opacity: 0.9;" class="fw-normal">
+                        C.F. 90041090573 &bull; Numero H24: 3793954151
+                    </div>
+                </div>
             </span>
             <div id="userInfo" class="d-none align-items-center">
                 <span class="badge badge-role me-2" id="userRoleBadge"></span>
@@ -214,7 +220,8 @@
                         <div class="card p-4 text-center">
                             <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-main" onerror="this.style.display='none'">
                             <h3 class="mt-2 mb-1 text-primary fw-bold">N.O.E. - Rieti 210</h3>
-                            <p class="text-muted mb-4">Nucleo Operativo Emergenza - Gestione Cloud</p>
+                            <p class="text-muted mb-1">Nucleo Operativo Emergenza - Gestione Cloud</p>
+                            <p class="small text-muted mb-4">C.F. 90041090573 &bull; H24: 3793954151</p>
                             
                             <form onsubmit="handleLogin(event)">
                                 <div class="mb-3 text-start">
@@ -252,7 +259,7 @@
                             <h4 class="mb-3 text-primary fw-bold text-center">Registrazione Volontario</h4>
                             <form onsubmit="handleRegister(event)">
                                 <div class="mb-3">
-                                    <label class="form-label font-weight-bold">Foto Profilo (Obbligatoria)*</label>
+                                    <label class="form-label font-weight-bold">Foto Profilo (Obbligatoria)* - Verrà compressa automaticamente</label>
                                     <input type="file" id="regFoto" accept="image/*" class="form-control" required>
                                 </div>
                                 <div class="row">
@@ -338,60 +345,62 @@
 
         window.renderMainView = function() {
             document.getElementById('appContainer').innerHTML = `
-                <div class="row text-center mb-4">
+                <div class="row text-center mb-2">
                     <div class="col-md-12">
                         <h2 class="fw-bold mb-1">Benvenuto, ${loggedUser.nome} ${loggedUser.cognome}</h2>
                         <p class="text-muted">Ruolo Attivo: <strong>${loggedUser.ruolo}</strong></p>
                     </div>
                 </div>
 
-                <ul class="nav nav-pills nav-fill mb-4 bg-white p-2 rounded shadow-sm border flex-wrap gap-1">
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'bacheca' ? 'active' : ''}" onclick="switchTab('bacheca')">
-                            <i class="bi bi-megaphone-fill me-1"></i> Bacheca Avvisi
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'anagrafica' ? 'active' : ''}" onclick="switchTab('anagrafica')">
-                            <i class="bi bi-people-fill me-1"></i> Volontari
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'turni' ? 'active' : ''}" onclick="switchTab('turni')">
-                            <i class="bi bi-calendar-event me-1"></i> Turni & Servizi
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'disponibilita' ? 'active' : ''}" onclick="switchTab('disponibilita')">
-                            <i class="bi bi-calendar-check me-1"></i> Disponibilità
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'storico' ? 'active' : ''}" onclick="switchTab('storico')">
-                            <i class="bi bi-clock-history me-1"></i> Storico Servizi
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'mezzi' ? 'active' : ''}" onclick="switchTab('mezzi')">
-                            <i class="bi bi-truck me-1"></i> Mezzi & Scadenze
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'rifornimenti' ? 'active' : ''}" onclick="switchTab('rifornimenti')">
-                            <i class="bi bi-fuel-pump me-1"></i> Rifornimenti
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'mappa' ? 'active' : ''}" onclick="switchTab('mappa')">
-                            <i class="bi bi-geo-alt-fill me-1"></i> Mappa Idrica
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'magazzino' ? 'active' : ''}" onclick="switchTab('magazzino')">
-                            <i class="bi bi-box-seam me-1"></i> Magazzino
-                        </a>
-                    </li>
-                </ul>
+                <div class="sticky-menu-bar shadow-sm rounded mb-4">
+                    <ul class="nav nav-pills nav-fill bg-white p-2 rounded border flex-wrap gap-1">
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'bacheca' ? 'active' : ''}" onclick="switchTab('bacheca')">
+                                <i class="bi bi-megaphone-fill me-1"></i> Bacheca Avvisi
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'anagrafica' ? 'active' : ''}" onclick="switchTab('anagrafica')">
+                                <i class="bi bi-people-fill me-1"></i> Volontari
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'turni' ? 'active' : ''}" onclick="switchTab('turni')">
+                                <i class="bi bi-calendar-event me-1"></i> Turni & Servizi
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'disponibilita' ? 'active' : ''}" onclick="switchTab('disponibilita')">
+                                <i class="bi bi-calendar-check me-1"></i> Disponibilità
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'storico' ? 'active' : ''}" onclick="switchTab('storico')">
+                                <i class="bi bi-clock-history me-1"></i> Storico Servizi
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'mezzi' ? 'active' : ''}" onclick="switchTab('mezzi')">
+                                <i class="bi bi-truck me-1"></i> Mezzi & Scadenze
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'rifornimenti' ? 'active' : ''}" onclick="switchTab('rifornimenti')">
+                                <i class="bi bi-fuel-pump me-1"></i> Rifornimenti
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'mappa' ? 'active' : ''}" onclick="switchTab('mappa')">
+                                <i class="bi bi-geo-alt-fill me-1"></i> Mappa Idrica
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'magazzino' ? 'active' : ''}" onclick="switchTab('magazzino')">
+                                <i class="bi bi-box-seam me-1"></i> Magazzino
+                            </a>
+                        </li>
+                    </ul>
+                </div>
 
                 <div id="tabContent"></div>
             `;
@@ -1041,7 +1050,7 @@
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-plus-circle me-2"></i>Inserimento Nuovo Mezzo</h4>
                     <form onsubmit="addVehicle(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto del Mezzo (Obbligatoria)*</label>
+                            <label class="form-label fw-bold">Foto del Mezzo (Obbligatoria)* - Verrà compressa automaticamente</label>
                             <input type="file" id="vFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
@@ -1205,7 +1214,7 @@
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-fuel-pump me-2"></i>Registra Nuovo Rifornimento</h4>
                     <form onsubmit="addRefuel(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto dello Scontrino (Obbligatoria)*</label>
+                            <label class="form-label fw-bold">Foto dello Scontrino (Obbligatoria)* - Verrà compressa automaticamente</label>
                             <input type="file" id="refFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
@@ -1298,7 +1307,7 @@
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-geo-alt-fill me-2"></i>Aggiungi Punto Rifornimento Idrico</h4>
                     <form onsubmit="addWaterPoint(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto del Punto Idrico (Obbligatoria)*</label>
+                            <label class="form-label fw-bold">Foto del Punto Idrico (Obbligatoria)* - Verrà compressa automaticamente</label>
                             <input type="file" id="wpFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
