@@ -1,13 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
-<!-- Configurazione PWA per installazione su Smartphone -->
-<link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#0d3b66">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="NOE Rieti">
-<link rel="apple-touch-icon" href="logo bianco.png">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>N.O.E. - Rieti 210 | Protezione Civile</title>
@@ -17,6 +10,13 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <!-- Leaflet CSS (Mappa Interattiva) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- Configurazione PWA per installazione su Smartphone -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#0d3b66">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="NOE Rieti">
+    <link rel="apple-touch-icon" href="logo bianco.png">
     <style>
         :root {
             --pc-blue: #0d3b66;
@@ -26,7 +26,6 @@
         body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         .bg-pc-header { background: linear-gradient(135deg, #0d3b66 0%, #1d4e89 100%); color: white; z-index: 1030; }
         .sticky-menu-bar { position: sticky; top: 56px; z-index: 1020; background-color: #f8f9fa; padding-top: 10px; padding-bottom: 10px; }
-        /* Menu fisso e ordinato su un'unica riga statica */
         .fixed-menu-container { display: flex; flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; gap: 5px; }
         .fixed-menu-container .nav-item { flex: 0 0 auto; }
         .btn-pc { background-color: var(--pc-blue); color: white; }
@@ -43,17 +42,16 @@
         .nav-pills .nav-link.active { background-color: #0d3b66 !important; color: white !important; }
         #map { height: 450px; width: 100%; border-radius: 12px; }
     </style>
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js')
-      .then(() => console.log("Service Worker registrato con successo!"))
-      .catch((err) => console.log("Errore Service Worker: ", err));
-  }
-</script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+          .then(() => console.log("Service Worker registrato con successo!"))
+          .catch((err) => console.log("Errore Service Worker: ", err));
+      }
+    </script>
 </head>
 <body>
-
-    <nav class="navbar bg-pc-header sticky-top shadow-sm">
+<nav class="navbar bg-pc-header sticky-top shadow-sm">
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1 d-flex align-items-center text-white">
                 <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-header" onerror="this.style.display='none'">
@@ -65,6 +63,9 @@
                 </div>
             </span>
             <div id="userInfo" class="d-none align-items-center gap-2">
+                <!-- Pulsante Archivio Report (Visibile solo ai Responsabili) -->
+                <div id="archiveBtnContainer"></div>
+                <!-- Pulsante Genera Word (Visibile solo al Responsabile App) -->
                 <div id="creatorReportBtnContainer"></div>
                 <span class="badge badge-role" id="userRoleBadge"></span>
                 <button class="btn btn-outline-light btn-sm" onclick="logout()">Esci</button>
@@ -145,6 +146,7 @@
         let waterPoints = [];
         let refuels = [];
         let announcements = [];
+        let uploadedReports = [];
 
         let activeTab = 'bacheca';
         let leafletMap = null;
@@ -217,6 +219,11 @@
                 const annSnap = await getDocs(collection(db, "announcements"));
                 announcements = annSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
+                try {
+                    const repSnap = await getDocs(collection(db, "uploadedReports"));
+                    uploadedReports = repSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                } catch(e) { uploadedReports = []; }
+
                 init();
             } catch (err) {
                 console.error("Errore di connessione a Firestore: ", err);
@@ -232,6 +239,17 @@
                 document.getElementById('userInfo').classList.add('d-flex');
                 document.getElementById('userRoleBadge').innerText = loggedUser.ruolo;
 
+                const archiveContainer = document.getElementById('archiveBtnContainer');
+                if (isManagerRole()) {
+                    archiveContainer.innerHTML = `
+                        <button class="btn btn-info btn-sm fw-bold text-white" onclick="switchTab('archivioReport')" title="Archivio Report Mensili Pubblicati">
+                            <i class="bi bi-folder-symlink-fill me-1"></i> Archivio Report
+                        </button>
+                    `;
+                } else {
+                    archiveContainer.innerHTML = '';
+                }
+
                 const creatorContainer = document.getElementById('creatorReportBtnContainer');
                 if (isAppCreator()) {
                     creatorContainer.innerHTML = `
@@ -246,8 +264,7 @@
                 renderMainView();
             }
         }
-
-        window.renderLogin = function() {
+window.renderLogin = function() {
             document.getElementById('appContainer').innerHTML = `
                 <div class="row justify-content-center">
                     <div class="col-md-5">
@@ -481,9 +498,9 @@
             else if (activeTab === 'rifornimenti') renderRifornimenti();
             else if (activeTab === 'mappa') renderMappa();
             else if (activeTab === 'magazzino') renderMagazzino();
+            else if (activeTab === 'archivioReport') renderArchivioReport();
         }
 
-        // --- SEZIONE BACHECA AVVISI ---
         window.renderBacheca = function() {
             const canPost = isManagerRole();
             const isAdmin = isSuperAdmin();
@@ -1055,7 +1072,7 @@ window.downloadWordReport = function() {
             if (role === 'Caposquadra') {
                 chkCS.classList.remove('d-none');
             } else if (role === 'Autista') {
-                chkAut.classList.remove('d-none');
+                chkAut.classList.add('d-none');
             }
         }
 
@@ -1279,33 +1296,29 @@ window.downloadWordReport = function() {
                 }
             }
         }
-
-        // --- SEZIONE STORICO SERVIZI ---
+// --- SEZIONE STORICO SERVIZI ---
         window.renderStorico = function() {
             const isAdmin = isSuperAdmin();
 
-            let historyListHTML = historyShifts.map((hs) => `
+            let histHTML = historyShifts.map((s) => `
                 <div class="col-md-6 mb-3">
-                    <div class="card p-3 border-start border-4 border-secondary h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h5 class="fw-bold text-dark mb-0">${hs.tipoServizio}</h5>
-                                <span class="badge bg-secondary">Concluso</span>
-                            </div>
-                            <p class="mb-1"><strong>Giorno:</strong> ${hs.data}</p>
-                            <p class="mb-1"><strong>Ora Inizio / Fine:</strong> ${hs.oraInizio} - ${hs.oraFine}</p>
-                            <p class="mb-1"><strong>Mezzi Usati:</strong> ${hs.mezzoUsato || 'Nessuno'}</p>
-                            <p class="mb-1 text-primary"><strong>KM Percorsi:</strong> ${hs.kmPercorsi} km ${hs.kmFinaliMezzo ? `(Km finali mezzo: ${hs.kmFinaliMezzo})` : ''}</p>
-                            <p class="mb-1"><strong>Note:</strong> ${hs.note || 'Nessuna'}</p>
-                            <hr class="my-2">
-                            <small class="fw-bold">Squadra Operativa:</small>
-                            <ul class="list-unstyled small mt-1 mb-0">
-                                ${hs.volontariDettaglio ? hs.volontariDettaglio.map(v => `<li>• ${v.nome} (${v.ruoloOperativo})</li>`).join('') : ''}
-                            </ul>
+                    <div class="card p-3 border-start border-4 border-secondary h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="fw-bold text-secondary mb-0">${s.tipoServizio}</h5>
+                            <span class="badge bg-secondary">Concluso</span>
                         </div>
+                        <p class="mb-1"><strong>Data Servizio:</strong> ${s.data} (Chiuso il: ${s.dataChiusura || 'N/D'})</p>
+                        <p class="mb-1"><strong>Orario effettivo:</strong> ${s.oraInizio} - ${s.oraFine}</p>
+                        <p class="mb-1"><strong>Mezzo impiegato:</strong> ${s.mezzoUsato || 'Nessuno'} | <strong>KM percorsi:</strong> ${s.kmPercorsi || 0} km</p>
+                        <p class="mb-1"><strong>Note:</strong> ${s.note || 'Nessuna'}</p>
+                        <hr class="my-2">
+                        <strong>Squadra Impiegata:</strong>
+                        <ul class="list-unstyled mt-1 small mb-0">
+                            ${s.volontariDettaglio.map(v => `<li><i class="bi bi-person-check me-1"></i>${v.nome} - <em>${v.ruoloOperativo}</em></li>`).join('')}
+                        </ul>
                         ${isAdmin ? `
-                            <div class="text-end mt-3 border-top pt-2">
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteHistoryShift('${hs.id}')">
+                            <div class="text-end mt-2 pt-2 border-top">
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteHistoryShift('${s.id}')">
                                     <i class="bi bi-trash"></i> Elimina dallo Storico
                                 </button>
                             </div>
@@ -1315,13 +1328,13 @@ window.downloadWordReport = function() {
             `).join('');
 
             document.getElementById('tabContent').innerHTML = `
-                <h4 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Storico Servizi Svolti (${historyShifts.length})</h4>
-                <div class="row">${historyListHTML.length > 0 ? historyListHTML : '<div class="col-12 text-muted">Nessun servizio archiviato nello storico.</div>'}</div>
+                <h4 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Storico Servizi Conclusi (${historyShifts.length})</h4>
+                <div class="row">${historyShifts.length > 0 ? histHTML : '<div class="col-12 text-muted">Nessun servizio nello storico.</div>'}</div>
             `;
         }
 
         window.deleteHistoryShift = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questo servizio dallo storico?")) {
+            if (confirm("Sei sicuro di voler eliminare questo record dallo storico?")) {
                 try {
                     await deleteDoc(doc(db, "historyShifts", id));
                     loadCloudData();
@@ -1331,169 +1344,110 @@ window.downloadWordReport = function() {
             }
         }
 
-        // --- SEZIONE MEZZI (CON EDITOR COMPLETO) ---
+        // --- SEZIONE MEZZI & SCADENZE ---
         window.renderMezzi = function() {
             const isAdmin = isSuperAdmin();
 
-            let list = vehicles.map((v) => `
-                <div class="col-md-6 mb-3">
-                    <div class="card p-3 h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            ${v.foto ? `<img src="${v.foto}" class="vehicle-img mb-3" alt="Foto Mezzo">` : ''}
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h5 class="fw-bold mb-0">${v.modello}</h5>
-                                <span class="badge bg-secondary">${v.targa}</span>
-                            </div>
-                            <p class="text-muted small mb-2">Tipologia: <strong>${v.tipo}</strong> | Km attuali: <strong>${v.km} km</strong></p>
-                            <div class="p-2 bg-light rounded small">
-                                <div><strong>Scadenza Revisione:</strong> ${v.revisione}</div>
-                                <div><strong>Scadenza Assicurazione:</strong> ${v.assicurazione}</div>
-                                <div><strong>Scadenza Bollo:</strong> ${v.bollo}</div>
-                            </div>
+            let vehiclesHTML = vehicles.map((v) => {
+                return `
+                    <div class="col-md-4 mb-3">
+                        <div class="card p-3 h-100">
+                            <img src="${v.foto}" class="vehicle-img mb-3" alt="Foto Mezzo">
+                            <h4 class="fw-bold text-primary mb-1">${v.modello}</h4>
+                            <p class="mb-1"><strong>Targa:</strong> ${v.targa}</p>
+                            <p class="mb-1"><strong>Chilometraggio:</strong> ${v.km} km</p>
+                            <hr class="my-2">
+                            <p class="mb-1 text-danger small"><strong>Assicurazione Scadenza:</strong> ${v.scadAssicurazione || 'Non indicata'}</p>
+                            <p class="mb-1 text-danger small"><strong>Revisione Scadenza:</strong> ${v.scadRevisione || 'Non indicata'}</p>
+                            <p class="mb-1 text-danger small"><strong>Tagliando Scadenza:</strong> ${v.scadTagliando || 'Non indicato'}</p>
+                            ${isAdmin ? `
+                                <div class="mt-3 pt-2 border-top">
+                                    <button class="btn btn-outline-danger btn-sm w-100" onclick="deleteVehicle('${v.id}')">
+                                        <i class="bi bi-trash me-1"></i>Elimina Mezzo
+                                    </button>
+                                </div>
+                            ` : ''}
                         </div>
-                        ${isAdmin ? `
-                            <div class="d-flex gap-2 mt-3 border-top pt-2">
-                                <button class="btn btn-sm btn-outline-primary w-50 fw-bold" onclick="openVehicleEditor('${v.id}')">
-                                    <i class="bi bi-pencil-square me-1"></i> Modifica Mezzo
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger w-50 fw-bold" onclick="deleteVehicle('${v.id}')">
-                                    <i class="bi bi-trash me-1"></i> Elimina
-                                </button>
-                            </div>
-                        ` : ''}
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
 
             document.getElementById('tabContent').innerHTML = `
-                <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-plus-circle me-2"></i>Inserimento Nuovo Mezzo</h4>
+                ${isAdmin ? `
+                <div class="card p-4 mb-4 bg-light border">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-truck me-2"></i>Registra Nuovo Automezzo in Flotta</h4>
                     <form onsubmit="addVehicle(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto del Mezzo (Obbligatoria)* - Verrà compressa automaticamente</label>
-                            <input type="file" id="vFoto" accept="image/*" class="form-control" required>
+                            <label class="form-label fw-bold">Foto Automezzo (Obbligatoria)*</label>
+                            <input type="file" id="vehFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
-                            <div class="col-md-6 mb-3"><label>Modello Mezzo*</label><input type="text" id="vModello" class="form-control" placeholder="es. Land Rover Defender" required></div>
-                            <div class="col-md-6 mb-3"><label>Targa*</label><input type="text" id="vTarga" class="form-control" placeholder="es. AB123CD" required></div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Modello / Nome Mezzo*</label>
+                                <input type="text" id="vehModello" class="form-control" placeholder="es. Iveco Daily AIB" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Targa*</label>
+                                <input type="text" id="vehTarga" class="form-control" placeholder="es. AB123CD" required>
+                            </div>
                         </div>
                         <div class="row">
-                            <div class="col-md-6 mb-3"><label>Tipologia Mezzo*</label><input type="text" id="vTipo" class="form-control" placeholder="es. Fuoristrada AIB" required></div>
-                            <div class="col-md-6 mb-3"><label>Chilometri Attuali*</label><input type="number" id="vKm" class="form-control" required></div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">KM Iniziali*</label>
+                                <input type="number" id="vehKm" class="form-control" value="0" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label text-danger">Scadenza Assicurazione</label>
+                                <input type="date" id="vehAss" class="form-control">
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label text-danger">Scadenza Revisione</label>
+                                <input type="date" id="vehRev" class="form-control">
+                            </div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-4 mb-3"><label>Scadenza Revisione*</label><input type="date" id="vRevisione" class="form-control" required></div>
-                            <div class="col-md-4 mb-3"><label>Scadenza Assicurazione*</label><input type="date" id="vAssicurazione" class="form-control" required></div>
-                            <div class="col-md-4 mb-3"><label>Scadenza Bollo*</label><input type="date" id="vBollo" class="form-control" required></div>
+                        <div class="mb-3">
+                            <label class="form-label text-danger">Scadenza Tagliando</label>
+                            <input type="date" id="vehTag" class="form-control">
                         </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva Mezzo</button>
+                        <button type="submit" class="btn btn-primary fw-bold">Aggiungi Mezzo alla Flotta</button>
                     </form>
                 </div>
+                ` : ''}
 
-                <h4 class="fw-bold mb-3">Parco Mezzi Associazione (${vehicles.length})</h4>
-                <div class="row">${list.length > 0 ? list : '<div class="col-12 text-muted">Nessun mezzo inserito.</div>'}</div>
-
-                <!-- Modale / Sezione Editor Mezzo -->
-                <div id="vehicleEditorContainer"></div>
+                <h4 class="fw-bold mb-3"><i class="bi bi-shield-check me-2"></i>Parco Automezzi e Scadenze (${vehicles.length})</h4>
+                <div class="row">${vehicles.length > 0 ? vehiclesHTML : '<div class="col-12 text-muted">Nessun mezzo registrato.</div>'}</div>
             `;
         }
 
         window.addVehicle = async function(e) {
             e.preventDefault();
-            const fotoFile = document.getElementById('vFoto').files[0];
+            const fotoFile = document.getElementById('vehFoto').files[0];
             if (!fotoFile) return;
 
             try {
-                const compressedDataUrl = await compressImage(fotoFile, 600, 0.7);
+                const compressedDataUrl = await compressImage(fotoFile, 800, 0.7);
                 const newVeh = {
-                    modello: document.getElementById('vModello').value,
-                    targa: document.getElementById('vTarga').value,
-                    tipo: document.getElementById('vTipo').value,
-                    km: parseInt(document.getElementById('vKm').value, 10),
-                    revisione: document.getElementById('vRevisione').value,
-                    assicurazione: document.getElementById('vAssicurazione').value,
-                    bollo: document.getElementById('vBollo').value,
+                    modello: document.getElementById('vehModello').value,
+                    targa: document.getElementById('vehTarga').value,
+                    km: parseInt(document.getElementById('vehKm').value, 10) || 0,
+                    scadAssicurazione: document.getElementById('vehAss').value,
+                    scadRevisione: document.getElementById('vehRev').value,
+                    scadTagliando: document.getElementById('vehTag').value,
                     foto: compressedDataUrl
                 };
 
                 await addDoc(collection(db, "vehicles"), newVeh);
-                alert('Mezzo salvato correttamente!');
+                alert("Automezzo aggiunto con successo!");
                 loadCloudData();
             } catch (err) {
                 console.error("Errore mezzo:", err);
             }
         }
 
-        window.openVehicleEditor = function(vId) {
-            const v = vehicles.find(item => item.id === vId);
-            if (!v) return;
-
-            const editorHTML = `
-                <div class="card p-4 mt-4 border border-primary shadow bg-light" id="editVehicleCard">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-pencil-square me-2"></i>Modifica Mezzo: ${v.modello} (${v.targa})</h4>
-                    <form onsubmit="saveVehicleEdit(event, '${v.id}')">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Nuova Foto Mezzo (Lascia vuoto per mantenere quella attuale)</label>
-                            <input type="file" id="editVFoto" accept="image/*" class="form-control">
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label>Modello Mezzo*</label><input type="text" id="editVModello" class="form-control" value="${v.modello}" required></div>
-                            <div class="col-md-6 mb-3"><label>Targa*</label><input type="text" id="editVTarga" class="form-control" value="${v.targa}" required></div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label>Tipologia Mezzo*</label><input type="text" id="editVTipo" class="form-control" value="${v.tipo}" required></div>
-                            <div class="col-md-6 mb-3"><label>Chilometri Attuali*</label><input type="number" id="editVKm" class="form-control" value="${v.km}" required></div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-4 mb-3"><label>Scadenza Revisione*</label><input type="date" id="editVRevisione" class="form-control" value="${v.revisione}" required></div>
-                            <div class="col-md-4 mb-3"><label>Scadenza Assicurazione*</label><input type="date" id="editVAssicurazione" class="form-control" value="${v.assicurazione}" required></div>
-                            <div class="col-md-4 mb-3"><label>Scadenza Bollo*</label><input type="date" id="editVBollo" class="form-control" value="${v.bollo}" required></div>
-                        </div>
-                        <div class="d-flex gap-2">
-                            <button type="submit" class="btn btn-primary fw-bold w-50"><i class="bi bi-check-circle me-1"></i>Salva Modifiche</button>
-                            <button type="button" class="btn btn-secondary fw-bold w-50" onclick="document.getElementById('editVehicleCard').remove()">Annulla</button>
-                        </div>
-                    </form>
-                </div>
-            `;
-            document.getElementById('vehicleEditorContainer').innerHTML = editorHTML;
-            document.getElementById('editVehicleCard').scrollIntoView({ behavior: 'smooth' });
-        }
-
-        window.saveVehicleEdit = async function(e, vId) {
-            e.preventDefault();
-            const v = vehicles.find(item => item.id === vId);
-            const fotoFile = document.getElementById('editVFoto').files[0];
-
-            try {
-                let fotoUrl = v.foto;
-                if (fotoFile) {
-                    fotoUrl = await compressImage(fotoFile, 600, 0.7);
-                }
-
-                const updatedData = {
-                    modello: document.getElementById('editVModello').value,
-                    targa: document.getElementById('editVTarga').value,
-                    tipo: document.getElementById('editVTipo').value,
-                    km: parseInt(document.getElementById('editVKm').value, 10),
-                    revisione: document.getElementById('editVRevisione').value,
-                    assicurazione: document.getElementById('editVAssicurazione').value,
-                    bollo: document.getElementById('editVBollo').value,
-                    foto: fotoUrl
-                };
-
-                await updateDoc(doc(db, "vehicles", vId), updatedData);
-                alert('Mezzo aggiornato con successo!');
-                loadCloudData();
-            } catch (err) {
-                console.error("Errore salvataggio modifica mezzo:", err);
-            }
-        }
-
-        window.deleteVehicle = async function(vId) {
-            if (confirm("Sei sicuro di voler eliminare questo mezzo dal parco veicoli?")) {
+        window.deleteVehicle = async function(id) {
+            if (confirm("Sei sicuro di voler eliminare questo mezzo dalla flotta?")) {
                 try {
-                    await deleteDoc(doc(db, "vehicles", vId));
+                    await deleteDoc(doc(db, "vehicles", id));
                     loadCloudData();
                 } catch (err) {
                     console.error("Errore eliminazione mezzo:", err);
@@ -1501,23 +1455,18 @@ window.downloadWordReport = function() {
             }
         }
 
-        // --- SEZIONE RIFORNIMENTI MEZZI ---
+        // --- SEZIONE RIFORNIMENTI ---
         window.renderRifornimenti = function() {
-            const isManager = isManagerRole();
             const isAdmin = isSuperAdmin();
 
-            let optionsMezzi = vehicles.map(v => `<option value="${v.modello} (${v.targa})">${v.modello} [${v.targa}]</option>`).join('');
-
-            let historyRefuelsHTML = refuels.map(r => `
+            let refHTML = refuels.map((r) => `
                 <div class="col-md-4 mb-3">
-                    <div class="card p-3 h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            ${r.fotoScontrino ? `<img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Scontrino Rifornimento">` : ''}
-                            <h5 class="fw-bold mb-1">${r.mezzo}</h5>
-                            <span class="badge bg-warning text-dark mb-2">€ ${r.importo} (${r.litri} Litri)</span>
-                            <p class="small text-muted mb-1"><strong>Data / Ora:</strong> ${r.data} - ${r.ora}</p>
-                            <p class="small text-muted mb-0"><strong>Registrato da:</strong> ${r.volontario}</p>
-                        </div>
+                    <div class="card p-3 h-100">
+                        <img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Foto Scontrino">
+                        <h5 class="fw-bold text-primary mb-1">${r.mezzo}</h5>
+                        <p class="mb-1"><strong>Data / Ora:</strong> ${r.data} - ${r.ora}</p>
+                        <p class="mb-1"><strong>Litri:</strong> ${r.litri} L | <strong>Importo:</strong> &euro; ${r.importo.toFixed(2)}</p>
+                        <p class="mb-1 small text-muted"><strong>Registrato da:</strong> ${r.volontario}</p>
                         ${isAdmin ? `
                             <div class="text-end mt-2 pt-2 border-top">
                                 <button class="btn btn-sm btn-outline-danger" onclick="deleteRefuel('${r.id}')">
@@ -1529,56 +1478,53 @@ window.downloadWordReport = function() {
                 </div>
             `).join('');
 
+            let optionsMezziRef = vehicles.map(v => `<option value="${v.modello} [${v.targa}]">${v.modello} [${v.targa}]</option>`).join('');
+
             document.getElementById('tabContent').innerHTML = `
-                <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-fuel-pump me-2"></i>Registra Nuovo Rifornimento</h4>
+                <div class="card p-4 mb-4 bg-light border">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-fuel-pump me-2"></i>Registra Rifornimento Carburante</h4>
                     <form onsubmit="addRefuel(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto dello Scontrino (Obbligatoria)* - Verrà compressa automaticamente</label>
+                            <label class="form-label fw-bold">Foto Scontrino / Ricevuta (Obbligatoria)*</label>
                             <input type="file" id="refFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Mezzo Rifornito*</label>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label fw-bold">Mezzo Rifornito*</label>
                                 <select id="refMezzo" class="form-select" required>
-                                    <option value="">Seleziona mezzo...</option>
-                                    ${optionsMezzi}
+                                    ${optionsMezziRef}
                                 </select>
                             </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label fw-bold">Litri Erogati*</label>
+                                <input type="number" step="0.01" id="refLitri" class="form-control" placeholder="es. 45.5" required>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label fw-bold">Importo Totale (&euro;)*</label>
+                                <input type="number" step="0.01" id="refImporto" class="form-control" placeholder="es. 85.00" required>
+                            </div>
+                        </div>
+                        <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label">Data Rifornimento*</label>
                                 <input type="date" id="refData" class="form-control" required>
                             </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Ora Rifornimento*</label>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Ora*</label>
                                 <input type="time" id="refOra" class="form-control" required>
                             </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Litri Inseriti*</label>
-                                <input type="number" step="0.01" id="refLitri" class="form-control" placeholder="es. 45.5" required>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Importo Totale (€)*</label>
-                                <input type="number" step="0.01" id="refImporto" class="form-control" placeholder="es. 75.00" required>
-                            </div>
                         </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva Rifornimento</button>
+                        <button type="submit" class="btn btn-warning fw-bold text-dark"><i class="bi bi-check-circle me-1"></i>Salva Rifornimento</button>
                     </form>
                 </div>
 
-                ${isManager ? `
-                    <h4 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Storico Rifornimenti Mezzi (${refuels.length})</h4>
-                    <div class="row">${historyRefuelsHTML.length > 0 ? historyRefuelsHTML : '<div class="col-12 text-muted">Nessun rifornimento registrato nello storico.</div>'}</div>
-                ` : `
-                    <div class="alert alert-info">
-                        <i class="bi bi-info-circle me-2"></i>Puoi inserire liberamente i rifornimenti dei mezzi tramite il modulo sopra. Lo storico completo è riservato ai responsabili dell'associazione.
-                    </div>
-                `}
+                <h4 class="fw-bold mb-3"><i class="bi bi-receipt me-2"></i>Storico Rifornimenti Flotta (${refuels.length})</h4>
+                <div class="row">${refuels.length > 0 ? refHTML : '<div class="col-12 text-muted">Nessun rifornimento registrato.</div>'}</div>
             `;
 
             document.getElementById('refData').value = new Date().toISOString().split('T')[0];
+            const now = new Date();
+            document.getElementById('refOra').value = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
         }
 
         window.addRefuel = async function(e) {
@@ -1587,19 +1533,19 @@ window.downloadWordReport = function() {
             if (!fotoFile) return;
 
             try {
-                const compressedDataUrl = await compressImage(fotoFile, 600, 0.7);
+                const compressedDataUrl = await compressImage(fotoFile, 800, 0.7);
                 const newRef = {
                     mezzo: document.getElementById('refMezzo').value,
+                    litri: parseFloat(document.getElementById('refLitri').value) || 0,
+                    importo: parseFloat(document.getElementById('refImporto').value) || 0,
                     data: document.getElementById('refData').value,
                     ora: document.getElementById('refOra').value,
-                    litri: parseFloat(document.getElementById('refLitri').value),
-                    importo: parseFloat(document.getElementById('refImporto').value),
                     volontario: `${loggedUser.nome} ${loggedUser.cognome}`,
                     fotoScontrino: compressedDataUrl
                 };
 
                 await addDoc(collection(db, "refuels"), newRef);
-                alert('Rifornimento registrato correttamente nel cloud!');
+                alert("Rifornimento registrato con successo!");
                 loadCloudData();
             } catch (err) {
                 console.error("Errore rifornimento:", err);
@@ -1607,7 +1553,7 @@ window.downloadWordReport = function() {
         }
 
         window.deleteRefuel = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questa registrazione di rifornimento?")) {
+            if (confirm("Sei sicuro di voler eliminare questo rifornimento?")) {
                 try {
                     await deleteDoc(doc(db, "refuels", id));
                     loadCloudData();
@@ -1616,149 +1562,111 @@ window.downloadWordReport = function() {
                 }
             }
         }
-
-        // --- SEZIONE MAPPA IDRICA CON MAPTILER ---
+// --- SEZIONE MAPPA IDRICA ---
         window.renderMappa = function() {
-            const canAddWaterPoints = isSuperAdmin();
+            const isAdmin = isSuperAdmin();
+
+            let wpHTML = waterPoints.map((wp) => `
+                <div class="col-md-4 mb-3">
+                    <div class="card p-3 h-100">
+                        <img src="${wp.foto}" class="hydrant-img mb-2" alt="Foto Punto Acqua">
+                        <h5 class="fw-bold text-primary mb-1">${wp.nome}</h5>
+                        <p class="mb-1"><strong>Tipo:</strong> ${wp.tipo}</p>
+                        <p class="mb-1"><strong>Portata / Note:</strong> ${wp.portata || 'N/D'}</p>
+                        <p class="mb-1 small text-muted"><strong>Coordinate:</strong> ${wp.lat.toFixed(4)}, ${wp.lng.toFixed(4)}</p>
+                        ${isAdmin ? `
+                            <div class="text-end mt-2 pt-2 border-top">
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteWaterPoint('${wp.id}')">
+                                    <i class="bi bi-trash"></i> Elimina
+                                </button>
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `).join('');
 
             document.getElementById('tabContent').innerHTML = `
-                ${canAddWaterPoints ? `
-                <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-geo-alt-fill me-2"></i>Aggiungi Punto Rifornimento Idrico</h4>
+                ${isAdmin ? `
+                <div class="card p-4 mb-4 bg-light border">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-geo-alt me-2"></i>Aggiungi Nuovo Punto Idrico (Idrante / Riserva)</h4>
                     <form onsubmit="addWaterPoint(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto del Punto Idrico (Obbligatoria)* - Verrà compressa automaticamente</label>
+                            <label class="form-label fw-bold">Foto Punto Acqua (Obbligatoria)*</label>
                             <input type="file" id="wpFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Nome / Identificativo Punto*</label>
-                                <input type="text" id="wpNome" class="form-control" placeholder="es. Idrante Piazza Municipio" required>
+                                <label class="form-label fw-bold">Nome / Identificativo*</label>
+                                <input type="text" id="wpNome" class="form-control" placeholder="es. Idrante Via Salaria km 50" required>
                             </div>
                             <div class="col-md-6 mb-3">
-                                <label class="form-label">Tipologia Fonte*</label>
-                                <select id="wpTipo" class="form-select" required>
-                                    <option value="Idrante Stradale">Idrante Stradale</option>
-                                    <option value="Cisterna / Serbatoio">Cisterna / Serbatoio</option>
-                                    <option value="Fiume / Torrente">Fiume / Torrente</option>
-                                    <option value="Vasca Antincendio">Vasca Antincendio</option>
-                                    <option value="Piscina / Altro">Piscina / Altro</option>
+                                <label class="form-label fw-bold">Tipologia*</label>
+                                <select id="wpTipo" class="form-select">
+                                    <option value="Idrante a Colonnina">Idrante a Colonnina</option>
+                                    <option value="Idrante Sottosuolo">Idrante Sottosuolo</option>
+                                    <option value="Vasca / Punto Attingimento AIB">Vasca / Punto Attingimento AIB</option>
                                 </select>
                             </div>
                         </div>
                         <div class="row">
-                            <div class="col-md-5 mb-3">
-                                <label class="form-label">Latitudine*</label>
-                                <input type="number" step="any" id="wpLat" class="form-control" placeholder="es. 42.4018" required>
-                            </div>
-                            <div class="col-md-5 mb-3">
-                                <label class="form-label">Longitudine*</label>
-                                <input type="number" step="any" id="wpLng" class="form-control" placeholder="es. 12.8625" required>
-                            </div>
-                            <div class="col-md-2 mb-3 d-flex align-items-end">
-                                <button type="button" class="btn btn-outline-secondary w-100" onclick="getGPSLocation()">
-                                    <i class="bi bi-crosshair"></i> GPS
-                                </button>
+                            <div class="col-md-4 mb-3"><label>Latitudine*</label><input type="number" step="any" id="wpLat" class="form-control" required></div>
+                            <div class="col-md-4 mb-3"><label>Longitudine*</label><input type="number" step="any" id="wpLng" class="form-control" required></div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="button" class="btn btn-outline-secondary w-100" onclick="getGPSCoordinates()">Ottieni GPS Attuale</button>
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Note Tecniche (Attacchi, Pressione, Accessibilità)</label>
-                            <input type="text" id="wpNote" class="form-control" placeholder="es. Attacco UNI 45">
+                            <label class="form-label">Portata / Pressione / Note</label>
+                            <input type="text" id="wpPortata" class="form-control" placeholder="es. Ottima pressione, raccordo UNI 45">
                         </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva Punto Idrico</button>
+                        <button type="submit" class="btn btn-primary fw-bold">Salva Punto sulla Mappa</button>
                     </form>
                 </div>
-                ` : `
-                <div class="alert alert-info mb-4">
-                    <i class="bi bi-info-circle me-2"></i>La mappa idrica è consultabile da tutti i volontari. L'inserimento dei punti è riservato al <strong>Responsabile AIB</strong> e al <strong>Responsabile App</strong>.
-                </div>
-                `}
+                ` : ''}
 
-                <div class="card p-3 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-map me-2"></i>Mappa Punti di Rifornimento Idrico - Provincia di Rieti (MapTiler)</h4>
-                    <div id="map"></div>
-                </div>
+                <h4 class="fw-bold mb-3"><i class="bi bi-map me-2"></i>Mappa Interattiva Punti Idrici Territorio (${waterPoints.length})</h4>
+                <div class="card p-3 mb-4"><div id="map"></div></div>
 
-                <h4 class="fw-bold mb-3">Elenco Punti Idrici Mappati (${waterPoints.length})</h4>
-                <div class="row" id="waterPointsList"></div>
+                <h4 class="fw-bold mb-3">Elenco Punti Idrici Registrati</h4>
+                <div class="row">${waterPoints.length > 0 ? wpHTML : '<div class="col-12 text-muted">Nessun punto idrico registrato.</div>'}</div>
             `;
 
-            initLeafletMap();
-            renderWaterPointsList();
+            setTimeout(() => {
+                if (leafletMap) {
+                    leafletMap.remove();
+                }
+                let centerLat = 42.3944;
+                let centerLng = 12.8575;
+                if (waterPoints.length > 0) {
+                    centerLat = waterPoints[0].lat;
+                    centerLng = waterPoints[0].lng;
+                }
+
+                leafletMap = L.map('map').setView([centerLat, centerLng], 12);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(leafletMap);
+
+                waterPoints.forEach(wp => {
+                    let marker = L.marker([wp.lat, wp.lng]).addTo(leafletMap);
+                    marker.bindPopup(`<b>${wp.nome}</b><br>Tipo: ${wp.tipo}<br>Note: ${wp.portata || 'N/D'}`);
+                });
+            }, 300);
         }
 
-        window.getGPSLocation = function() {
-            if ("geolocation" in navigator) {
-                navigator.geolocation.getCurrentPosition(function(position) {
-                    document.getElementById('wpLat').value = position.coords.latitude.toFixed(6);
-                    document.getElementById('wpLng').value = position.coords.longitude.toFixed(6);
-                }, function(error) {
+        window.getGPSCoordinates = function() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(position => {
+                    document.getElementById('wpLat').value = position.coords.latitude;
+                    document.getElementById('wpLng').value = position.coords.longitude;
+                    alert("Coordinate GPS acquisite con successo!");
+                }, error => {
                     alert("Impossibile rilevare la posizione GPS: " + error.message);
                 });
             } else {
-                alert("La geolocalizzazione non è supportata dal browser.");
+                alert("Geolocalizzazione non supportata dal browser.");
             }
-        }
-
-        window.initLeafletMap = function() {
-            leafletMap = L.map('map').setView([42.4018, 12.8625], 10);
-
-            L.tileLayer('https://api.maptiler.com/maps/openstreetmap/{z}/{x}/{y}.jpg?key=QeLP7wxI47cpyEeT1u36', {
-                tileSize: 512,
-                zoomOffset: -1,
-                minZoom: 1,
-                maxZoom: 19,
-                attribution: '&copy; <a href="https://www.maptiler.com/copyright/">MapTiler</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
-                crossOrigin: true
-            }).addTo(leafletMap);
-
-            waterPoints.forEach(wp => {
-                const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`;
-                const popupContent = `
-                    <div style="max-width: 200px;">
-                        ${wp.foto ? `<img src="${wp.foto}" style="width:100%; height:100px; object-fit:cover; border-radius:4px; margin-bottom:5px;">` : ''}
-                        <h6><strong>${wp.nome}</strong></h6>
-                        <p style="font-size:12px; margin-bottom:5px;">${wp.tipo}<br>${wp.note || ''}</p>
-                        <a href="${navUrl}" target="_blank" class="btn btn-sm btn-primary w-100 text-white fw-bold">
-                            <i class="bi bi-compass me-1"></i> Apri Google Maps
-                        </a>
-                    </div>
-                `;
-                L.marker([wp.lat, wp.lng]).addTo(leafletMap).bindPopup(popupContent);
-            });
-        }
-
-        window.renderWaterPointsList = function() {
-            const isAdmin = isSuperAdmin();
-
-            let listHTML = waterPoints.map((wp) => {
-                const navUrl = `https://www.google.com/maps/dir/?api=1&destination=${wp.lat},${wp.lng}`;
-                return `
-                    <div class="col-md-4 mb-3">
-                        <div class="card p-3 h-100 d-flex flex-column justify-content-between">
-                            <div>
-                                ${wp.foto ? `<img src="${wp.foto}" class="hydrant-img mb-2" alt="Foto Punto Idrico">` : ''}
-                                <h5 class="fw-bold mb-1">${wp.nome}</h5>
-                                <span class="badge bg-info mb-2">${wp.tipo}</span>
-                                <p class="small text-muted mb-1"><strong>Coordinate:</strong> ${wp.lat}, ${wp.lng}</p>
-                                <p class="small text-muted mb-2"><strong>Note:</strong> ${wp.note || 'Nessuna nota'}</p>
-                            </div>
-                            <div>
-                                <a href="${navUrl}" target="_blank" class="btn btn-primary btn-sm w-100 fw-bold mt-2">
-                                    <i class="bi bi-compass me-1"></i> Naviga su Google Maps
-                                </a>
-                                ${isAdmin ? `
-                                    <button class="btn btn-outline-danger btn-sm w-100 mt-2" onclick="deleteWaterPoint('${wp.id}')">
-                                        <i class="bi bi-trash"></i> Elimina Punto
-                                    </button>
-                                ` : ''}
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            document.getElementById('waterPointsList').innerHTML = listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessun punto idrico mappato.</div>';
         }
 
         window.addWaterPoint = async function(e) {
@@ -1767,18 +1675,18 @@ window.downloadWordReport = function() {
             if (!fotoFile) return;
 
             try {
-                const compressedDataUrl = await compressImage(fotoFile, 600, 0.7);
+                const compressedDataUrl = await compressImage(fotoFile, 800, 0.7);
                 const newWp = {
                     nome: document.getElementById('wpNome').value,
                     tipo: document.getElementById('wpTipo').value,
                     lat: parseFloat(document.getElementById('wpLat').value),
                     lng: parseFloat(document.getElementById('wpLng').value),
-                    note: document.getElementById('wpNote').value,
+                    portata: document.getElementById('wpPortata').value,
                     foto: compressedDataUrl
                 };
 
                 await addDoc(collection(db, "waterPoints"), newWp);
-                alert('Punto idrico aggiunto correttamente!');
+                alert("Punto idrico salvato!");
                 loadCloudData();
             } catch (err) {
                 console.error("Errore punto idrico:", err);
@@ -1791,7 +1699,7 @@ window.downloadWordReport = function() {
                     await deleteDoc(doc(db, "waterPoints", id));
                     loadCloudData();
                 } catch (err) {
-                    console.error("Errore eliminazione punto idrico:", err);
+                    console.error("Errore eliminazione:", err);
                 }
             }
         }
@@ -1800,91 +1708,207 @@ window.downloadWordReport = function() {
         window.renderMagazzino = function() {
             const isAdmin = isSuperAdmin();
 
-            let list = inventory.map((item) => `
-                <div class="col-md-4 mb-3">
-                    <div class="card p-3 text-center h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            <h5 class="fw-bold">${item.nome}</h5>
-                            <p class="text-muted small mb-1">Categoria: ${item.cat}</p>
-                            <h2 class="display-6 fw-bold text-primary my-2">${item.qta}</h2>
-                            <p class="text-muted small">Scorta Minima: ${item.scortaMin}</p>
-                            <div class="btn-group mb-2">
-                                <button class="btn btn-outline-danger btn-sm" onclick="updateStock('${item.id}', ${item.qta}, -1)">-1</button>
-                                <button class="btn btn-outline-success btn-sm" onclick="updateStock('${item.id}', ${item.qta}, 1)">+1</button>
-                            </div>
-                        </div>
+            let invHTML = inventory.map((item) => `
+                <div class="col-md-3 mb-3">
+                    <div class="card p-3 h-100 text-center">
+                        <h5 class="fw-bold text-primary mb-1">${item.nome}</h5>
+                        <p class="mb-1 text-muted small">Categoria: ${item.categoria}</p>
+                        <h3 class="fw-bold text-dark my-2">${item.quantita} <span class="fs-6 text-muted">${item.unita || 'pz'}</span></h3>
                         ${isAdmin ? `
-                            <div class="border-top pt-2">
-                                <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteInventoryItem('${item.id}')">
-                                    <i class="bi bi-trash"></i> Elimina Articolo
-                                </button>
+                            <div class="mt-auto pt-2 border-top d-flex justify-content-between gap-1">
+                                <button class="btn btn-sm btn-outline-success w-50" onclick="updateStock('${item.id}', 1)">+1</button>
+                                <button class="btn btn-sm btn-outline-warning w-50" onclick="updateStock('${item.id}', -1)">-1</button>
                             </div>
+                            <button class="btn btn-sm btn-outline-danger w-100 mt-2" onclick="deleteInventoryItem('${item.id}')">Elimina Articolo</button>
                         ` : ''}
                     </div>
                 </div>
             `).join('');
 
             document.getElementById('tabContent').innerHTML = `
-                <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-box-seam me-2"></i>Inserimento Attrezzatura / Materiale</h4>
-                    <form onsubmit="addMaterial(event)">
+                ${isAdmin ? `
+                <div class="card p-4 mb-4 bg-light border">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-box-seam me-2"></i>Aggiungi Articolo in Magazzino</h4>
+                    <form onsubmit="addInventoryItem(event)">
                         <div class="row">
-                            <div class="col-md-6 mb-3"><label>Nome Attrezzatura/Materiale*</label><input type="text" id="matNome" class="form-control" placeholder="es. Gruppo Elettrogeno 5kW" required></div>
-                            <div class="col-md-6 mb-3"><label>Categoria*</label><input type="text" id="matCat" class="form-control" placeholder="es. Attrezzatura AIB, DPI" required></div>
+                            <div class="col-md-4 mb-3"><label>Nome Articolo*</label><input type="text" id="invNome" class="form-control" placeholder="es. Mascherine FFP2" required></div>
+                            <div class="col-md-4 mb-3"><label>Categoria*</label><input type="text" id="invCat" class="form-control" placeholder="es. DPI / Attrezzatura" required></div>
+                            <div class="col-md-2 mb-3"><label>Quantità Iniziale*</label><input type="number" id="invQta" class="form-control" value="1" required></div>
+                            <div class="col-md-2 mb-3"><label>Unità di Misura</label><input type="text" id="invUnita" class="form-control" placeholder="es. pz / scatole"></div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label>Quantità Iniziale*</label><input type="number" id="matQta" class="form-control" required></div>
-                            <div class="col-md-6 mb-3"><label>Soglia Scorta Minima*</label><input type="number" id="matScorta" class="form-control" required></div>
-                        </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva in Magazzino</button>
+                        <button type="submit" class="btn btn-primary fw-bold">Aggiungi al Magazzino</button>
                     </form>
                 </div>
+                ` : ''}
 
-                <h4 class="fw-bold mb-3">Attrezzature e Magazzino (${inventory.length})</h4>
-                <div class="row">${list.length > 0 ? list : '<div class="col-12 text-muted">Nessuna attrezzatura inserita.</div>'}</div>
+                <h4 class="fw-bold mb-3"><i class="bi bi-boxes me-2"></i>Inventario Magazzino DPI ed Attrezzature (${inventory.length})</h4>
+                <div class="row">${inventory.length > 0 ? invHTML : '<div class="col-12 text-muted">Magazzino vuoto.</div>'}</div>
             `;
         }
 
-        window.addMaterial = async function(e) {
+        window.addInventoryItem = async function(e) {
             e.preventDefault();
             const newItem = {
-                nome: document.getElementById('matNome').value,
-                cat: document.getElementById('matCat').value,
-                qta: parseInt(document.getElementById('matQta').value, 10),
-                scortaMin: parseInt(document.getElementById('matScorta').value, 10)
+                nome: document.getElementById('invNome').value,
+                categoria: document.getElementById('invCat').value,
+                quantita: parseInt(document.getElementById('invQta').value, 10) || 0,
+                unita: document.getElementById('invUnita').value || 'pz'
             };
 
             try {
                 await addDoc(collection(db, "inventory"), newItem);
-                alert('Attrezzatura aggiunta!');
+                alert("Articolo aggiunto al magazzino!");
                 loadCloudData();
             } catch (err) {
                 console.error("Errore magazzino:", err);
             }
         }
 
-        window.updateStock = async function(itemId, currentQta, change) {
-            const newQta = Math.max(0, currentQta + change);
+        window.updateStock = async function(itemId, delta) {
+            const item = inventory.find(i => i.id === itemId);
+            if (!item) return;
+            const newQta = Math.max(0, (item.quantita || 0) + delta);
             try {
-                await updateDoc(doc(db, "inventory", itemId), { qta: newQta });
+                await updateDoc(doc(db, "inventory", itemId), { quantita: newQta });
                 loadCloudData();
             } catch (err) {
-                console.error("Errore stock:", err);
+                console.error("Errore aggiornamento scorte:", err);
             }
         }
 
-        window.deleteInventoryItem = async function(id) {
+        window.deleteInventoryItem = async function(itemId) {
             if (confirm("Sei sicuro di voler eliminare questo articolo dal magazzino?")) {
                 try {
-                    await deleteDoc(doc(db, "inventory", id));
+                    await deleteDoc(doc(db, "inventory", itemId));
                     loadCloudData();
                 } catch (err) {
-                    console.error("Errore eliminazione magazzino:", err);
+                    console.error("Errore eliminazione articolo:", err);
                 }
             }
         }
 
+        // --- SEZIONE ARCHIVIO REPORT MENSILI (RISERVATA AI RESPONSABILI / CREATORE) ---
+        window.renderArchivioReport = function() {
+            if (!isManagerRole()) {
+                document.getElementById('appContainer').innerHTML = `<div class="alert alert-danger">Accesso non autorizzato. Area riservata ai Responsabili.</div>`;
+                return;
+            }
+
+            const canUpload = isAppCreator();
+
+            let reportsHTML = uploadedReports.map((rep) => `
+                <div class="col-md-6 mb-3">
+                    <div class="card p-3 border-start border-4 border-info h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h5 class="fw-bold text-primary mb-0"><i class="bi bi-file-earmark-text me-1"></i>${rep.titolo}</h5>
+                            <small class="text-muted">${rep.dataCaricamento}</small>
+                        </div>
+                        <p class="mb-1"><strong>Periodo Riferimento:</strong> ${rep.periodo}</p>
+                        <p class="mb-2 text-dark small">${rep.descrizione || 'Nessuna descrizione'}</p>
+                        <div class="d-flex justify-content-between align-items-center mt-auto pt-2 border-top">
+                            <a href="${rep.fileUrl}" download="${rep.fileName || 'report.doc'}" class="btn btn-sm btn-pc fw-bold">
+                                <i class="bi bi-download me-1"></i> Scarica Report (.doc)
+                            </a>
+                            ${canUpload ? `
+                                <button class="btn btn-sm btn-outline-danger" onclick="deleteReport('${rep.id}')">
+                                    <i class="bi bi-trash"></i> Elimina
+                                </button>
+                            ` : ''}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('tabContent').innerHTML = `
+                <div class="mb-3">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="switchTab('bacheca')">
+                        <i class="bi bi-arrow-left me-1"></i> Torna alla Bacheca
+                    </button>
+                </div>
+
+                ${canUpload ? `
+                <div class="card p-4 mb-4 bg-light border">
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-cloud-arrow-up me-2"></i>Carica Nuovo Report Mensile Ufficiale (Creatore App)</h4>
+                    <form onsubmit="uploadReportFile(event)">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Titolo del Report*</label>
+                                <input type="text" id="repTitolo" class="form-control" placeholder="es. Report Operativo Ottobre 2026" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label fw-bold">Mese e Anno di Riferimento (es. 10/2026)*</label>
+                                <input type="text" id="repPeriodo" class="form-control" placeholder="MM/AAAA" required>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-bold">Seleziona File del Report (.doc / Word)*</label>
+                            <input type="file" id="repFile" accept=".doc,.docx,application/msword" class="form-control" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Note / Descrizione sintetica</label>
+                            <textarea id="repDesc" class="form-control" rows="2" placeholder="Eventuali annotazioni sul report caricato..."></textarea>
+                        </div>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-upload me-1"></i>Carica e Pubblica in Archivio</button>
+                    </form>
+                </div>
+                ` : `
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-info-circle me-2"></i>Stai visualizzando l'archivio protetto dei report mensili in consultazione (Accesso consentito ai Responsabili). Il caricamento di nuovi file è riservato al Creatore App.
+                </div>
+                `}
+
+                <h4 class="fw-bold mb-3"><i class="bi bi-folder2-open me-2"></i>Archivio Storico Report Mensili (${uploadedReports.length})</h4>
+                <div class="row">${uploadedReports.length > 0 ? reportsHTML : '<div class="col-12 text-muted">Nessun report mensile archiviato al momento.</div>'}</div>
+            `;
+        }
+
+        window.uploadReportFile = async function(e) {
+            e.preventDefault();
+            const fileInput = document.getElementById('repFile');
+            const file = fileInput.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = async function(event) {
+                const base64File = event.target.result;
+                const newReport = {
+                    titolo: document.getElementById('repTitolo').value,
+                    periodo: document.getElementById('repPeriodo').value,
+                    descrizione: document.getElementById('repDesc').value,
+                    fileName: file.name,
+                    fileUrl: base64File,
+                    dataCaricamento: new Date().toLocaleDateString('it-IT'),
+                    caricatoDa: `${loggedUser.nome} ${loggedUser.cognome}`
+                };
+
+                try {
+                    await addDoc(collection(db, "uploadedReports"), newReport);
+                    alert("Report caricato e salvato nell'archivio cloud con successo!");
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore caricamento report:", err);
+                    alert("Errore durante il salvataggio del report.");
+                }
+            };
+            reader.readAsDataURL(file);
+        }
+
+        window.deleteReport = async function(id) {
+            if (confirm("Sei sicuro di voler eliminare questo report dall'archivio?")) {
+                try {
+                    await deleteDoc(doc(db, "uploadedReports", id));
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore eliminazione report:", err);
+                }
+            }
+        }
+
+        // Avvio caricamento dati da Firebase all'apertura
         loadCloudData();
     </script>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
