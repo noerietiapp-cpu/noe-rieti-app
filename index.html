@@ -218,8 +218,8 @@
                 const creatorContainer = document.getElementById('creatorReportBtnContainer');
                 if (isAppCreator()) {
                     creatorContainer.innerHTML = `
-                        <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="downloadMonthlyReport()" title="Scarica Report Mensile Excel">
-                            <i class="bi bi-file-earmark-arrow-down-fill me-1"></i> Report Excel
+                        <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="downloadWordReport()" title="Scarica Report Operativo Mensile Word">
+                            <i class="bi bi-file-earmark-word-fill me-1"></i> Report Word (.doc)
                         </button>
                     `;
                 } else {
@@ -523,11 +523,10 @@
                 <div class="row">${announcements.length > 0 ? annHTML : '<div class="col-12 text-muted">Nessun avviso presente in bacheca.</div>'}</div>
             `;
         }
-
-        window.downloadMonthlyReport = function() {
+window.downloadWordReport = function() {
             const today = new Date();
             const defaultMonth = String(today.getMonth() + 1).padStart(2, '0') + '/' + today.getFullYear();
-            const inputMonth = prompt("Inserisci il Mese e Anno del report nel formato MM/AAAA:", defaultMonth);
+            const inputMonth = prompt("Inserisci Mese e Anno del report nel formato MM/AAAA:", defaultMonth);
 
             if (!inputMonth) return;
 
@@ -564,72 +563,211 @@
             });
             filteredRefuels.sort((a, b) => a.data.localeCompare(b.data) || a.ora.localeCompare(b.ora));
 
+            let totalKmMonth = 0;
             let kmPerVehicle = {};
             filteredShifts.forEach(s => {
+                const km = parseInt(s.kmPercorsi, 10) || 0;
+                totalKmMonth += km;
                 if (s.mezzoUsato && s.mezzoUsato !== "Nessun Mezzo") {
-                    kmPerVehicle[s.mezzoUsato] = (kmPerVehicle[s.mezzoUsato] || 0) + (s.kmPercorsi || 0);
+                    kmPerVehicle[s.mezzoUsato] = (kmPerVehicle[s.mezzoUsato] || 0) + km;
                 }
             });
 
-            let csvContent = "\uFEFF";
-            csvContent += `REPORT MENSILE COMPLETO ATIVITA' N.O.E. RIETI 210 - MESE: ${inputMonth}\n\n`;
+            let totalFuelCost = 0;
+            let totalLiters = 0;
+            filteredRefuels.forEach(r => {
+                totalFuelCost += (parseFloat(r.importo) || 0);
+                totalLiters += (parseFloat(r.litri) || 0);
+            });
 
-            csvContent += "=== 1. STORICO SERVIZI E TURNI SVOLTI IN ORDINE CRONOLOGICO ===\n";
-            csvContent += "Data;Ora Inizio;Ora Fine;Tipo Servizio;Mezzo Utilizzato;KM Percorsi;Note;Squadra Operativa\n";
+            let docHTML = `
+                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+                <head>
+                    <meta charset='utf-8'>
+                    <title>Report Operativo Mensile N.O.E. Rieti</title>
+                    <style>
+                        body { font-family: 'Calibri', 'Arial', sans-serif; font-size: 11pt; color: #000; margin: 2cm; }
+                        h1 { font-size: 16pt; color: #0d3b66; text-align: center; text-transform: uppercase; margin-bottom: 5px; font-weight: bold; }
+                        h2 { font-size: 13pt; color: #0d3b66; border-bottom: 2px solid #0d3b66; padding-bottom: 3px; margin-top: 20px; text-transform: uppercase; }
+                        .header-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; border-bottom: 2px solid #0d3b66; }
+                        .header-table td { padding: 5px; vertical-align: middle; }
+                        .sub-header { font-size: 10pt; text-align: center; color: #555; margin-bottom: 25px; }
+                        table.data-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10pt; }
+                        table.data-table th { background-color: #0d3b66; color: #ffffff; padding: 6px; text-align: left; border: 1px solid #0d3b66; font-size: 9.5pt; text-transform: uppercase; }
+                        table.data-table td { padding: 6px; border: 1px solid #cccccc; vertical-align: top; }
+                        table.data-table tr:nth-child(even) { background-color: #f2f5f8; }
+                        .summary-box { background-color: #f8f9fa; border: 1px solid #0d3b66; padding: 12px; margin-bottom: 15px; border-radius: 4px; }
+                        .signature-section { margin-top: 40px; width: 100%; }
+                        .signature-box { width: 45%; float: left; text-align: center; font-size: 10pt; }
+                    </style>
+                </head>
+                <body>
+                    <table class="header-table">
+                        <tr>
+                            <td style="width: 20%; text-align: left;">
+                                <strong>DIPARTIMENTO PROTEZIONE CIVILE</strong><br>
+                                <span style="font-size: 9pt;">Regione Lazio &bull; Prov. Rieti</span>
+                            </td>
+                            <td style="width: 60%; text-align: center;">
+                                <h1>N.O.E. - RIETI 210</h1>
+                                <div style="font-size: 10pt; font-weight: bold;">NUCLEO OPERATIVO EMERGENZA</div>
+                            </td>
+                            <td style="width: 20%; text-align: right; font-size: 9pt;">
+                                <strong>C.F.:</strong> 90041090573<br>
+                                <strong>H24:</strong> 3793954151
+                            </td>
+                        </tr>
+                    </table>
 
-            if (filteredShifts.length === 0) {
-                csvContent += "Nessun servizio registrato nel mese selezionato;;;;;;;\n";
-            } else {
-                filteredShifts.forEach(s => {
-                    let squadraStr = s.volontariDettaglio ? s.volontariDettaglio.map(v => `${v.nome} (${v.ruoloOperativo})`).join(" | ") : "";
-                    csvContent += `"${s.data}";"${s.oraInizio}";"${s.oraFine}";"${s.tipoServizio}";"${s.mezzoUsato || 'Nessuno'}";"${s.kmPercorsi || 0}";"${s.note || ''}";"${squadraStr}"\n`;
-                });
-            }
+                    <div class="sub-header">
+                        <strong>VERBALE OPERATIVO E DI RIGUARDO MENSILE</strong><br>
+                        PERIODO DI RIFERIMENTO: <u>${inputMonth}</u> &bull; PROTOCOLLO INTERNO DI SERVIZ
+                    </div>
 
-            csvContent += "\n=== 2. CONTEGGIO TOTALE KM PERCORSI PER CIASCUN MEZZO NEL MESE ===\n";
-            csvContent += "Mezzo;KM Totali Effettuati nel Mese\n";
-            let vehicleKeys = Object.keys(kmPerVehicle);
-            if (vehicleKeys.length === 0) {
-                csvContent += "Nessun chilometraggio registrato per i mezzi;;;\n";
-            } else {
-                vehicleKeys.forEach(vk => {
-                    csvContent += `"${vk}";"${kmPerVehicle[vk]} KM"\n`;
-                });
-            }
+                    <h2>1. RIEPILOGO SINTETICO ATTIVITÀ OPERATIVE</h2>
+                    <div class="summary-box">
+                        <strong>- Totale Servizi/Turni Conclusi:</strong> ${filteredShifts.length}<br>
+                        <strong>- Chilometri Totali Percorsi dalla Flotta:</strong> ${totalKmMonth} KM<br>
+                        <strong>- Rifornimenti Carburante Effettuati:</strong> ${filteredRefuels.length} erogazioni (${totalLiters.toFixed(2)} Litri | Spesa Totale: € ${totalFuelCost.toFixed(2)})<br>
+                        <strong>- Comunicati ed Ordini di Servizio in Bacheca:</strong> ${announcements.length} attivi
+                    </div>
 
-            csvContent += "\n=== 3. STORICO RIFORNIMENTI EFFETTUATI NEL MESE ===\n";
-            csvContent += "Data;Ora;Mezzo;Litri Inseriti;Importo Totale (€);Volontario Registrante\n";
+                    <h2>2. REGISTRO DETTAGLIATO TURNI E SERVIZI svolti</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 12%;">Data</th>
+                                <th style="width: 12%;">Orario</th>
+                                <th style="width: 20%;">Tipologia Servizio</th>
+                                <th style="width: 18%;">Mezzo Impiegato</th>
+                                <th style="width: 8%;">KM</th>
+                                <th style="width: 30%;">Squadra Operativa e Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredShifts.length === 0 ? '<tr><td colspan="6" style="text-align:center;"><em>Nessuna attività registrata nel mese selezionato.</em></td></tr>' : 
+                            filteredShifts.map(s => {
+                                let squadra = s.volontariDettaglio ? s.volontariDettaglio.map(v => `${v.nome} (${v.ruoloOperativo})`).join(', ') : 'N/A';
+                                return `
+                                    <tr>
+                                        <td>${s.data}</td>
+                                        <td>${s.oraInizio} - ${s.oraFine}</td>
+                                        <td><strong>${s.tipoServizio}</strong></td>
+                                        <td>${s.mezzoUsato || 'Nessuno'}</td>
+                                        <td>${s.kmPercorsi || 0} km</td>
+                                        <td><strong>Squadra:</strong> ${squadra}<br><em>Note: ${s.note || 'Nessuna'}</em></td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
 
-            if (filteredRefuels.length === 0) {
-                csvContent += "Nessun rifornimento registrato nel mese selezionato;;;;;\n";
-            } else {
-                filteredRefuels.forEach(r => {
-                    csvContent += `"${r.data}";"${r.ora}";"${r.mezzo}";"${r.litri}";"${r.importo}";"${r.volontario}"\n`;
-                });
-            }
+                    <h2>3. REPORT LOGISTICO FLOTTA MEZZI ED EROGAZIONI CARBURANTE</h2>
+                    <p><strong>Riepilogo Chilometraggio Mensile per Automezzo:</strong></p>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Modello / Targa Automezzo</th>
+                                <th>KM Percorsi nel Mese</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${Object.keys(kmPerVehicle).length === 0 ? '<tr><td colspan="2" style="text-align:center;"><em>Nessun utilizzo mezzi registrato nel mese.</em></td></tr>' :
+                            Object.keys(kmPerVehicle).map(vk => `
+                                <tr>
+                                    <td><strong>${vk}</strong></td>
+                                    <td>${kmPerVehicle[vk]} KM</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
 
-            csvContent += "\n=== 4. STORICO COMUNICATI IN BACHECA E REGISTRO LETTURE ===\n";
-            csvContent += "Data Pubblicazione;Titolo Avviso;Autore;Volontari Che Hanno Visto L'Avviso (Nome e Data/Ora)\n";
+                    <p style="margin-top: 15px;"><strong>Registro Rifornimenti Carburante:</strong></p>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Data / Ora</th>
+                                <th>Mezzo Rifornito</th>
+                                <th>Litri</th>
+                                <th>Importo (€)</th>
+                                <th>Operatore Registrante</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredRefuels.length === 0 ? '<tr><td colspan="5" style="text-align:center;"><em>Nessun rifornimento effettuato nel mese.</em></td></tr>' :
+                            filteredRefuels.map(r => `
+                                <tr>
+                                    <td>${r.data} - ${r.ora}</td>
+                                    <td><strong>${r.mezzo}</strong></td>
+                                    <td>${r.litri} L</td>
+                                    <td>€ ${r.importo.toFixed(2)}</td>
+                                    <td>${r.volontario}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
 
-            if (announcements.length === 0) {
-                csvContent += "Nessun avviso presente in bacheca;;;\n";
-            } else {
-                announcements.forEach(a => {
-                    let lettiList = a.lettiDa || [];
-                    let lettiStr = lettiList.map(l => `${l.nome} (${l.dataOra})`).join(" | ");
-                    csvContent += `"${a.data}";"${a.titolo}";"${a.autore}";"${lettiStr || 'Nessuna lettura registrata'}"\n`;
-                });
-            }
+                    <h2>4. DIRETTIVE DI BACHECA E REGISTRO PRESA VISIONE OPERATORI</h2>
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th style="width: 15%;">Data Pubbl.</th>
+                                <th style="width: 25%;">Titolo Comunicato</th>
+                                <th style="width: 20%;">Autore</th>
+                                <th style="width: 40%;">Registro Presa Visione (Volontario - Data/Ora)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${announcements.length === 0 ? '<tr><td colspan="4" style="text-align:center;"><em>Nessun avviso presente in bacheca.</em></td></tr>' :
+                            announcements.map(a => {
+                                let lettiList = a.lettiDa || [];
+                                let lettiStr = lettiList.map(l => `${l.nome} (${l.dataOra})`).join('<br>');
+                                return `
+                                    <tr>
+                                        <td>${a.data}</td>
+                                        <td><strong>${a.titolo}</strong></td>
+                                        <td>${a.autore}</td>
+                                        <td><small>${lettiStr || '<em>Nessuna lettura registrata</em>'}</small></td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
 
-            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+                    <div style="margin-top: 30px; font-size: 9.5pt; text-align: justify; color: #444;">
+                        <em>Il presente documento costituisce verbale ufficiale interno delle attività svolte dal Nucleo Operativo Emergenza N.O.E. Rieti Cod. 210 per il mese di ${inputMonth}. Dati estratti ed archiviati digitalmente mediante il sistema gestionale Cloud dell'Associazione.</em>
+                    </div>
+
+                    <table class="signature-section">
+                        <tr>
+                            <td class="signature-box" style="text-align: left;">
+                                <strong>Il Redattore del Report</strong><br>
+                                Responsabile App / Gestionale Cloud<br><br><br>
+                                ____________________________________
+                            </td>
+                            <td class="signature-box" style="text-align: right;">
+                                <strong>Visto dal Legale Rappresentante</strong><br>
+                                Il Presidente / Responsabile di Nucleo<br><br><br>
+                                ____________________________________
+                            </td>
+                        </tr>
+                    </table>
+                </body>
+                </html>
+            `;
+
+            const blob = new Blob(['\ufeff', docHTML], {
+                type: 'application/msword'
+            });
+
             const url = URL.createObjectURL(blob);
             const link = document.createElement("a");
-            link.setAttribute("href", url);
-            link.setAttribute("download", `Report_NOE_Rieti_${mStr}_${yStr}.csv`);
+            link.href = url;
+            link.download = `Report_Operativo_NOE_Rieti_${mStr}_${yStr}.doc`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-            alert(`Report mensile (${inputMonth}) generato e scaricato con successo!`);
+            alert(`Report Operativo Word (${inputMonth}) scaricato correttamente!`);
         };
 
         window.addAnnouncement = async function(e) {
