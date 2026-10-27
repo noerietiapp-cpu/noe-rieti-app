@@ -928,7 +928,7 @@ window.downloadWordReport = function() {
             }
         }
 
-        // --- SEZIONE TURNI & SERVIZI ---
+        // --- SEZIONE TURNI & SERVIZI (AGGIORNATA CON RUOLI MULTIPLI) ---
         window.renderTurni = function() {
             const isAdmin = isSuperAdmin();
 
@@ -977,11 +977,30 @@ window.downloadWordReport = function() {
                         </label>
                     </div>
                     <div id="vol_opts_${idx}" class="mt-2 ps-3 d-none border-start border-3 border-info">
-                        <label class="form-label small fw-bold mb-1">Ruolo Operativo Svolto nel Servizio:*</label>
-                        <select id="vol_ruolo_${idx}" class="form-select form-select-sm mb-2" onchange="toggleChecklistMansione(${idx})">
-                            ${OPERATIVE_ROLES.map(r => `<option value="${r}">${r}</option>`).join('')}
-                        </select>
-                        <div id="checklist_cs_${idx}" class="form-check small bg-warning bg-opacity-10 p-2 rounded mb-2">
+                        <label class="form-label small fw-bold mb-1">Seleziona Ruoli Operativi Svolti (anche multipli):*</label>
+                        <div class="d-flex flex-wrap gap-2 mb-2">
+                            <div class="form-check">
+                                <input class="form-check-input op-role-cb_${idx}" type="checkbox" value="Caposquadra" id="role_cs_${idx}" onchange="toggleChecklistMansione(${idx})">
+                                <label class="form-check-label small" for="role_cs_${idx}">Caposquadra</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input op-role-cb_${idx}" type="checkbox" value="Autista" id="role_aut_${idx}" onchange="toggleChecklistMansione(${idx})">
+                                <label class="form-check-label small" for="role_aut_${idx}">Autista</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input op-role-cb_${idx}" type="checkbox" value="Operatore" id="role_op_${idx}">
+                                <label class="form-check-label small" for="role_op_${idx}">Operatore</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input op-role-cb_${idx}" type="checkbox" value="Soccorritore" id="role_soc_${idx}">
+                                <label class="form-check-label small" for="role_soc_${idx}">Soccorritore</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input op-role-cb_${idx}" type="checkbox" value="4° Uomo (Affiancamento)" id="role_4th_${idx}">
+                                <label class="form-check-label small" for="role_4th_${idx}">4° Uomo</label>
+                            </div>
+                        </div>
+                        <div id="checklist_cs_${idx}" class="form-check small bg-warning bg-opacity-10 p-2 rounded mb-2 d-none">
                             <input class="form-check-input" type="checkbox" id="chk_cs_${idx}">
                             <label class="form-check-label fw-bold text-dark" for="chk_cs_${idx}">
                                 Mansione Caposquadra: Controllato DPI squadra, stato radio ed attrezzatura.
@@ -1055,24 +1074,30 @@ window.downloadWordReport = function() {
             const opts = document.getElementById(`vol_opts_${idx}`);
             if(cb.checked) {
                 opts.classList.remove('d-none');
-                toggleChecklistMansione(idx);
             } else {
                 opts.classList.add('d-none');
             }
         }
 
         window.toggleChecklistMansione = function(idx) {
-            const role = document.getElementById(`vol_ruolo_${idx}`).value;
+            const isCaposquadra = document.getElementById(`role_cs_${idx}`).checked;
+            const isAutista = document.getElementById(`role_aut_${idx}`).checked;
+            
             const chkCS = document.getElementById(`checklist_cs_${idx}`);
             const chkAut = document.getElementById(`checklist_aut_${idx}`);
 
-            chkCS.classList.add('d-none');
-            chkAut.classList.add('d-none');
-
-            if (role === 'Caposquadra') {
+            if (isCaposquadra) {
                 chkCS.classList.remove('d-none');
-            } else if (role === 'Autista') {
+            } else {
+                chkCS.classList.add('d-none');
+                document.getElementById(`chk_cs_${idx}`).checked = false;
+            }
+
+            if (isAutista) {
+                chkAut.classList.remove('d-none');
+            } else {
                 chkAut.classList.add('d-none');
+                document.getElementById(`chk_aut_${idx}`).checked = false;
             }
         }
 
@@ -1083,17 +1108,33 @@ window.downloadWordReport = function() {
             users.forEach((u, idx) => {
                 const cb = document.getElementById(`vol_cb_${idx}`);
                 if (cb && cb.checked) {
-                    const rOp = document.getElementById(`vol_ruolo_${idx}`).value;
-                    let mansioniChecked = false;
-                    if (rOp === 'Caposquadra') {
-                        mansioniChecked = document.getElementById(`chk_cs_${idx}`).checked;
-                        if (!mansioniChecked) {
+                    let rolesList = [];
+                    OPERATIVE_ROLES.forEach(r => {
+                        let checkboxId = '';
+                        if (r === 'Caposquadra') checkboxId = `role_cs_${idx}`;
+                        else if (r === 'Autista') checkboxId = `role_aut_${idx}`;
+                        else if (r === 'Operatore') checkboxId = `role_op_${idx}`;
+                        else if (r === 'Soccorritore') checkboxId = `role_soc_${idx}`;
+                        else if (r === '4° Uomo (Affiancamento)') checkboxId = `role_4th_${idx}`;
+
+                        if (checkboxId && document.getElementById(checkboxId).checked) {
+                            rolesList.push(r);
+                        }
+                    });
+
+                    if (rolesList.length === 0) {
+                        alert(`Seleziona almeno un ruolo operativo per ${u.nome} ${u.cognome}!`);
+                        throw new Error("Ruolo operativo mancante");
+                    }
+
+                    if (rolesList.includes('Caposquadra')) {
+                        if (!document.getElementById(`chk_cs_${idx}`).checked) {
                             alert(`Il caposquadra ${u.nome} ${u.cognome} deve spuntare la mansione obbligatoria di controllo DPI/Radio!`);
                             throw new Error("Mansione obbligatoria mancante");
                         }
-                    } else if (rOp === 'Autista') {
-                        mansioniChecked = document.getElementById(`chk_aut_${idx}`).checked;
-                        if (!mansioniChecked) {
+                    }
+                    if (rolesList.includes('Autista')) {
+                        if (!document.getElementById(`chk_aut_${idx}`).checked) {
                             alert(`L'autista ${u.nome} ${u.cognome} deve spuntare la mansione obbligatoria di controllo liquidi/mezzo!`);
                             throw new Error("Mansione obbligatoria mancante");
                         }
@@ -1101,8 +1142,8 @@ window.downloadWordReport = function() {
 
                     selectedVols.push({
                         nome: `${u.nome} ${u.cognome}`,
-                        ruoloOperativo: rOp,
-                        mansioniSpuntate: mansioniChecked
+                        ruoloOperativo: rolesList.join(' + '),
+                        mansioniSpuntate: true
                     });
                 }
             });
