@@ -17,7 +17,8 @@
             --pc-accent: #e63946;
         }
         body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .bg-pc-header { background: linear-gradient(135deg, #0d3b66 0%, #1d4e89 100%); color: white; }
+        .bg-pc-header { background: linear-gradient(135deg, #0d3b66 0%, #1d4e89 100%); color: white; z-index: 1030; }
+        .sticky-menu-bar { position: sticky; top: 56px; z-index: 1020; background-color: #f8f9fa; padding-top: 10px; padding-bottom: 10px; }
         .btn-pc { background-color: var(--pc-blue); color: white; }
         .btn-pc:hover { background-color: #082642; color: white; }
         .card { border-radius: 12px; border: none; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
@@ -39,17 +40,23 @@
         <div class="container-fluid">
             <span class="navbar-brand mb-0 h1 d-flex align-items-center text-white">
                 <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-header" onerror="this.style.display='none'">
-                <span>N.O.E. - Rieti (Cod. 210) - Cloud Sync</span>
+                <div>
+                    <span style="font-size: 1.1rem; font-weight: bold;">N.O.E. - Rieti (Cod. 210)</span>
+                    <div style="font-size: 0.75rem; opacity: 0.9;" class="fw-normal">
+                        C.F. 90041090573 &bull; Numero H24: 3793954151
+                    </div>
+                </div>
             </span>
-            <div id="userInfo" class="d-none align-items-center">
-                <span class="badge badge-role me-2" id="userRoleBadge"></span>
+            <div id="userInfo" class="d-none align-items-center gap-2">
+                <div id="creatorReportBtnContainer"></div>
+                <span class="badge badge-role" id="userRoleBadge"></span>
                 <button class="btn btn-outline-light btn-sm" onclick="logout()">Esci</button>
             </div>
         </div>
     </nav>
 
     <div class="container my-4" id="appContainer">
-        <!-- Verr� popolato via JavaScript -->
+        <!-- Verrà popolato via JavaScript -->
     </div>
 
     <!-- Leaflet JS per Mappa -->
@@ -58,7 +65,7 @@
     <!-- Firebase SDKs & Core Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-        import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+        import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyC3Nu_m2eCSPre7XBOJbGXs0s6dU_N1E4",
@@ -108,7 +115,7 @@
             "Autista",
             "Operatore",
             "Soccorritore",
-            "4� Uomo (Affiancamento)"
+            "4° Uomo (Affiancamento)"
         ];
 
         let users = [];
@@ -122,11 +129,15 @@
         let refuels = [];
         let announcements = [];
 
-        let activeTab = 'anagrafica';
+        let activeTab = 'bacheca';
         let leafletMap = null;
 
         function isSuperAdmin() {
             return loggedUser && (loggedUser.ruolo === "Responsabile App" || loggedUser.ruolo === "Responsabile AIB");
+        }
+
+        function isAppCreator() {
+            return loggedUser && loggedUser.ruolo === "Responsabile App";
         }
 
         function isManagerRole() {
@@ -203,6 +214,18 @@
                 document.getElementById('userInfo').classList.remove('d-none');
                 document.getElementById('userInfo').classList.add('d-flex');
                 document.getElementById('userRoleBadge').innerText = loggedUser.ruolo;
+
+                const creatorContainer = document.getElementById('creatorReportBtnContainer');
+                if (isAppCreator()) {
+                    creatorContainer.innerHTML = `
+                        <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="downloadMonthlyReport()" title="Scarica Report Mensile Excel">
+                            <i class="bi bi-file-earmark-arrow-down-fill me-1"></i> Report Excel
+                        </button>
+                    `;
+                } else {
+                    creatorContainer.innerHTML = '';
+                }
+
                 renderMainView();
             }
         }
@@ -214,7 +237,8 @@
                         <div class="card p-4 text-center">
                             <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-main" onerror="this.style.display='none'">
                             <h3 class="mt-2 mb-1 text-primary fw-bold">N.O.E. - Rieti 210</h3>
-                            <p class="text-muted mb-4">Nucleo Operativo Emergenza - Gestione Cloud</p>
+                            <p class="text-muted mb-1">Nucleo Operativo Emergenza - Gestione Cloud</p>
+                            <p class="small text-muted mb-4">C.F. 90041090573 &bull; H24: 3793954151</p>
                             
                             <form onsubmit="handleLogin(event)">
                                 <div class="mb-3 text-start">
@@ -252,7 +276,7 @@
                             <h4 class="mb-3 text-primary fw-bold text-center">Registrazione Volontario</h4>
                             <form onsubmit="handleRegister(event)">
                                 <div class="mb-3">
-                                    <label class="form-label font-weight-bold">Foto Profilo (Obbligatoria)*</label>
+                                    <label class="form-label font-weight-bold">Foto Profilo (Obbligatoria)* - Verrà compressa automaticamente</label>
                                     <input type="file" id="regFoto" accept="image/*" class="form-control" required>
                                 </div>
                                 <div class="row">
@@ -333,70 +357,105 @@
 
         window.switchTab = function(tab) {
             activeTab = tab;
+            if (tab === 'bacheca') {
+                markAllAnnouncementsAsRead();
+            }
             renderMainView();
         }
 
+        window.markAllAnnouncementsAsRead = async function() {
+            const userName = `${loggedUser.nome} ${loggedUser.cognome}`;
+            for (let ann of announcements) {
+                let letti = ann.lettiDa || [];
+                if (!letti.some(l => l.nome === userName)) {
+                    try {
+                        await updateDoc(doc(db, "announcements", ann.id), {
+                            lettiDa: arrayUnion({
+                                nome: userName,
+                                dataOra: new Date().toLocaleString('it-IT')
+                            })
+                        });
+                    } catch (err) {
+                        console.error("Errore marcatura lettura:", err);
+                    }
+                }
+            }
+        }
+
         window.renderMainView = function() {
+            const userName = `${loggedUser.nome} ${loggedUser.cognome}`;
+            let unreadCount = announcements.filter(ann => {
+                let letti = ann.lettiDa || [];
+                return !letti.some(l => l.nome === userName);
+            }).length;
+
+            let bachecaBadge = unreadCount > 0 ? `<span class="badge bg-danger ms-1 rounded-pill">${unreadCount}</span>` : '';
+
             document.getElementById('appContainer').innerHTML = `
-                <div class="row text-center mb-4">
+                <div class="row text-center mb-2">
                     <div class="col-md-12">
                         <h2 class="fw-bold mb-1">Benvenuto, ${loggedUser.nome} ${loggedUser.cognome}</h2>
                         <p class="text-muted">Ruolo Attivo: <strong>${loggedUser.ruolo}</strong></p>
                     </div>
                 </div>
 
-                <ul class="nav nav-pills nav-fill mb-4 bg-white p-2 rounded shadow-sm border flex-wrap gap-1">
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'bacheca' ? 'active' : ''}" onclick="switchTab('bacheca')">
-                            <i class="bi bi-megaphone-fill me-1"></i> Bacheca Avvisi
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'anagrafica' ? 'active' : ''}" onclick="switchTab('anagrafica')">
-                            <i class="bi bi-people-fill me-1"></i> Volontari
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'turni' ? 'active' : ''}" onclick="switchTab('turni')">
-                            <i class="bi bi-calendar-event me-1"></i> Turni & Servizi
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'disponibilita' ? 'active' : ''}" onclick="switchTab('disponibilita')">
-                            <i class="bi bi-calendar-check me-1"></i> Disponibilit�
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'storico' ? 'active' : ''}" onclick="switchTab('storico')">
-                            <i class="bi bi-clock-history me-1"></i> Storico Servizi
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'mezzi' ? 'active' : ''}" onclick="switchTab('mezzi')">
-                            <i class="bi bi-truck me-1"></i> Mezzi & Scadenze
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'rifornimenti' ? 'active' : ''}" onclick="switchTab('rifornimenti')">
-                            <i class="bi bi-fuel-pump me-1"></i> Rifornimenti
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'mappa' ? 'active' : ''}" onclick="switchTab('mappa')">
-                            <i class="bi bi-geo-alt-fill me-1"></i> Mappa Idrica
-                        </a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link ${activeTab === 'magazzino' ? 'active' : ''}" onclick="switchTab('magazzino')">
-                            <i class="bi bi-box-seam me-1"></i> Magazzino
-                        </a>
-                    </li>
-                </ul>
+                <div class="sticky-menu-bar shadow-sm rounded mb-4">
+                    <ul class="nav nav-pills nav-fill bg-white p-2 rounded border flex-wrap gap-1">
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'bacheca' ? 'active' : ''}" onclick="switchTab('bacheca')">
+                                <i class="bi bi-megaphone-fill me-1"></i> Bacheca Avvisi ${bachecaBadge}
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'anagrafica' ? 'active' : ''}" onclick="switchTab('anagrafica')">
+                                <i class="bi bi-people-fill me-1"></i> Volontari
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'turni' ? 'active' : ''}" onclick="switchTab('turni')">
+                                <i class="bi bi-calendar-event me-1"></i> Turni & Servizi
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'disponibilita' ? 'active' : ''}" onclick="switchTab('disponibilita')">
+                                <i class="bi bi-calendar-check me-1"></i> Disponibilità
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'storico' ? 'active' : ''}" onclick="switchTab('storico')">
+                                <i class="bi bi-clock-history me-1"></i> Storico Servizi
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'mezzi' ? 'active' : ''}" onclick="switchTab('mezzi')">
+                                <i class="bi bi-truck me-1"></i> Mezzi & Scadenze
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'rifornimenti' ? 'active' : ''}" onclick="switchTab('rifornimenti')">
+                                <i class="bi bi-fuel-pump me-1"></i> Rifornimenti
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'mappa' ? 'active' : ''}" onclick="switchTab('mappa')">
+                                <i class="bi bi-geo-alt-fill me-1"></i> Mappa Idrica
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link ${activeTab === 'magazzino' ? 'active' : ''}" onclick="switchTab('magazzino')">
+                                <i class="bi bi-box-seam me-1"></i> Magazzino
+                            </a>
+                        </li>
+                    </ul>
+                </div>
 
                 <div id="tabContent"></div>
             `;
 
-            if (activeTab === 'bacheca') renderBacheca();
+            if (activeTab === 'bacheca') {
+                renderBacheca();
+                markAllAnnouncementsAsRead();
+            }
             else if (activeTab === 'anagrafica') renderAnagrafica();
             else if (activeTab === 'turni') renderTurni();
             else if (activeTab === 'disponibilita') renderDisponibilita();
@@ -412,25 +471,31 @@
             const canPost = isManagerRole();
             const isAdmin = isSuperAdmin();
 
-            let annHTML = announcements.map((ann) => `
-                <div class="col-md-12 mb-3">
-                    <div class="card p-3 border-start border-4 border-warning shadow-sm">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="fw-bold text-primary mb-0">${ann.titolo}</h5>
-                            <small class="text-muted">${ann.data}</small>
-                        </div>
-                        <p class="mb-2 text-dark" style="white-space: pre-line;">${ann.testo}</p>
-                        <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-2">
-                            <small class="text-secondary">Pubblicato da: <strong>${ann.autore}</strong> (${ann.ruoloAutore})</small>
-                            ${isAdmin ? `
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteAnnouncement('${ann.id}')">
-                                    <i class="bi bi-trash"></i> Elimina
-                                </button>
-                            ` : ''}
+            let annHTML = announcements.map((ann) => {
+                let lettiList = ann.lettiDa || [];
+                let lettiHtml = `<details class="mt-2 text-muted small"><summary style="cursor: pointer;">Visualizzazioni (${lettiList.length} volontari)</summary><ul class="ps-3 mb-0 mt-1">${lettiList.map(l => `<li>${l.nome} - <em>${l.dataOra}</em></li>`).join('')}</ul></details>`;
+
+                return `
+                    <div class="col-md-12 mb-3">
+                        <div class="card p-3 border-start border-4 border-warning shadow-sm">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h5 class="fw-bold text-primary mb-0">${ann.titolo}</h5>
+                                <small class="text-muted">${ann.data}</small>
+                            </div>
+                            <p class="mb-2 text-dark" style="white-space: pre-line;">${ann.testo}</p>
+                            ${lettiHtml}
+                            <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-2">
+                                <small class="text-secondary">Pubblicato da: <strong>${ann.autore}</strong> (${ann.ruoloAutore})</small>
+                                ${isAdmin ? `
+                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteAnnouncement('${ann.id}')">
+                                        <i class="bi bi-trash"></i> Elimina
+                                    </button>
+                                ` : ''}
+                            </div>
                         </div>
                     </div>
-                </div>
-            `).join('');
+                `;
+            }).join('');
 
             document.getElementById('tabContent').innerHTML = `
                 ${canPost ? `
@@ -459,6 +524,114 @@
             `;
         }
 
+        window.downloadMonthlyReport = function() {
+            const today = new Date();
+            const defaultMonth = String(today.getMonth() + 1).padStart(2, '0') + '/' + today.getFullYear();
+            const inputMonth = prompt("Inserisci il Mese e Anno del report nel formato MM/AAAA:", defaultMonth);
+
+            if (!inputMonth) return;
+
+            const [mStr, yStr] = inputMonth.split('/');
+            const monthInt = parseInt(mStr, 10);
+            const yearInt = parseInt(yStr, 10);
+
+            if (isNaN(monthInt) || isNaN(yearInt) || monthInt < 1 || monthInt > 12) {
+                alert("Formato data non valido! Usa MM/AAAA (es. 10/2026).");
+                return;
+            }
+
+            let filteredShifts = historyShifts.filter(s => {
+                if (!s.data) return false;
+                const parts = s.data.split('-');
+                if (parts.length === 3) {
+                    const year = parseInt(parts[0], 10);
+                    const month = parseInt(parts[1], 10);
+                    return year === yearInt && month === monthInt;
+                }
+                return false;
+            });
+            filteredShifts.sort((a, b) => a.data.localeCompare(b.data) || a.oraInizio.localeCompare(b.oraInizio));
+
+            let filteredRefuels = refuels.filter(r => {
+                if (!r.data) return false;
+                const parts = r.data.split('-');
+                if (parts.length === 3) {
+                    const year = parseInt(parts[0], 10);
+                    const month = parseInt(parts[1], 10);
+                    return year === yearInt && month === monthInt;
+                }
+                return false;
+            });
+            filteredRefuels.sort((a, b) => a.data.localeCompare(b.data) || a.ora.localeCompare(b.ora));
+
+            let kmPerVehicle = {};
+            filteredShifts.forEach(s => {
+                if (s.mezzoUsato && s.mezzoUsato !== "Nessun Mezzo") {
+                    kmPerVehicle[s.mezzoUsato] = (kmPerVehicle[s.mezzoUsato] || 0) + (s.kmPercorsi || 0);
+                }
+            });
+
+            let csvContent = "\uFEFF";
+            csvContent += `REPORT MENSILE COMPLETO ATIVITA' N.O.E. RIETI 210 - MESE: ${inputMonth}\n\n`;
+
+            csvContent += "=== 1. STORICO SERVIZI E TURNI SVOLTI IN ORDINE CRONOLOGICO ===\n";
+            csvContent += "Data;Ora Inizio;Ora Fine;Tipo Servizio;Mezzo Utilizzato;KM Percorsi;Note;Squadra Operativa\n";
+
+            if (filteredShifts.length === 0) {
+                csvContent += "Nessun servizio registrato nel mese selezionato;;;;;;;\n";
+            } else {
+                filteredShifts.forEach(s => {
+                    let squadraStr = s.volontariDettaglio ? s.volontariDettaglio.map(v => `${v.nome} (${v.ruoloOperativo})`).join(" | ") : "";
+                    csvContent += `"${s.data}";"${s.oraInizio}";"${s.oraFine}";"${s.tipoServizio}";"${s.mezzoUsato || 'Nessuno'}";"${s.kmPercorsi || 0}";"${s.note || ''}";"${squadraStr}"\n`;
+                });
+            }
+
+            csvContent += "\n=== 2. CONTEGGIO TOTALE KM PERCORSI PER CIASCUN MEZZO NEL MESE ===\n";
+            csvContent += "Mezzo;KM Totali Effettuati nel Mese\n";
+            let vehicleKeys = Object.keys(kmPerVehicle);
+            if (vehicleKeys.length === 0) {
+                csvContent += "Nessun chilometraggio registrato per i mezzi;;;\n";
+            } else {
+                vehicleKeys.forEach(vk => {
+                    csvContent += `"${vk}";"${kmPerVehicle[vk]} KM"\n`;
+                });
+            }
+
+            csvContent += "\n=== 3. STORICO RIFORNIMENTI EFFETTUATI NEL MESE ===\n";
+            csvContent += "Data;Ora;Mezzo;Litri Inseriti;Importo Totale (€);Volontario Registrante\n";
+
+            if (filteredRefuels.length === 0) {
+                csvContent += "Nessun rifornimento registrato nel mese selezionato;;;;;\n";
+            } else {
+                filteredRefuels.forEach(r => {
+                    csvContent += `"${r.data}";"${r.ora}";"${r.mezzo}";"${r.litri}";"${r.importo}";"${r.volontario}"\n`;
+                });
+            }
+
+            csvContent += "\n=== 4. STORICO COMUNICATI IN BACHECA E REGISTRO LETTURE ===\n";
+            csvContent += "Data Pubblicazione;Titolo Avviso;Autore;Volontari Che Hanno Visto L'Avviso (Nome e Data/Ora)\n";
+
+            if (announcements.length === 0) {
+                csvContent += "Nessun avviso presente in bacheca;;;\n";
+            } else {
+                announcements.forEach(a => {
+                    let lettiList = a.lettiDa || [];
+                    let lettiStr = lettiList.map(l => `${l.nome} (${l.dataOra})`).join(" | ");
+                    csvContent += `"${a.data}";"${a.titolo}";"${a.autore}";"${lettiStr || 'Nessuna lettura registrata'}"\n`;
+                });
+            }
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Report_NOE_Rieti_${mStr}_${yStr}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            alert(`Report mensile (${inputMonth}) generato e scaricato con successo!`);
+        };
+
         window.addAnnouncement = async function(e) {
             e.preventDefault();
             const newAnn = {
@@ -466,7 +639,8 @@
                 testo: document.getElementById('annTesto').value,
                 data: new Date().toLocaleString('it-IT'),
                 autore: `${loggedUser.nome} ${loggedUser.cognome}`,
-                ruoloAutore: loggedUser.ruolo
+                ruoloAutore: loggedUser.ruolo,
+                lettiDa: []
             };
 
             try {
@@ -857,7 +1031,7 @@
             }
         }
 
-        // --- SEZIONE DISPONIBILIT� ---
+        // --- SEZIONE DISPONIBILITÀ ---
         window.renderDisponibilita = function() {
             const isAdmin = isSuperAdmin();
 
@@ -869,7 +1043,7 @@
                             <div>
                                 <div class="d-flex justify-content-between align-items-center mb-1">
                                     <h6 class="fw-bold mb-0 text-primary">${a.userName}</h6>
-                                    ${isMine ? '<span class="badge bg-success">Tua Disponibilit�</span>' : ''}
+                                    ${isMine ? '<span class="badge bg-success">Tua Disponibilità</span>' : ''}
                                 </div>
                                 <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
                                 <p class="mb-1"><strong>Fascia Oraria:</strong> ${a.oraInizio} - ${a.oraFine}</p>
@@ -889,11 +1063,11 @@
 
             document.getElementById('tabContent').innerHTML = `
                 <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-check me-2"></i>Inserisci la tua Disponibilit�</h4>
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-check me-2"></i>Inserisci la tua Disponibilità</h4>
                     <form onsubmit="addAvailability(event)">
                         <div class="row">
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">Data Disponibilit�*</label>
+                                <label class="form-label">Data Disponibilità*</label>
                                 <input type="date" id="dispData" class="form-control" required>
                             </div>
                             <div class="col-md-4 mb-3">
@@ -909,12 +1083,12 @@
                             <label class="form-label">Note / Eventuali limitazioni</label>
                             <input type="text" id="dispNote" class="form-control" placeholder="es. Disponibile solo per servizi AIB">
                         </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-plus-circle me-1"></i>Aggiungi Disponibilit�</button>
+                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-plus-circle me-1"></i>Aggiungi Disponibilità</button>
                     </form>
                 </div>
 
-                <h4 class="fw-bold mb-3">Calendario Disponibilit� Operatori (${availabilities.length})</h4>
-                <div class="row">${listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessuna disponibilit� comunicata.</div>'}</div>
+                <h4 class="fw-bold mb-3">Calendario Disponibilità Operatori (${availabilities.length})</h4>
+                <div class="row">${listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessuna disponibilità comunicata.</div>'}</div>
             `;
 
             document.getElementById('dispData').value = new Date().toISOString().split('T')[0];
@@ -933,15 +1107,15 @@
 
             try {
                 await addDoc(collection(db, "availabilities"), newDisp);
-                alert('Disponibilit� inserita con successo!');
+                alert('Disponibilità inserita con successo!');
                 loadCloudData();
             } catch (err) {
-                console.error("Errore disponibilit�:", err);
+                console.error("Errore disponibilità:", err);
             }
         }
 
         window.deleteAvailability = async function(id) {
-            if(confirm("Sei sicuro di voler rimuovere questa disponibilit�?")) {
+            if(confirm("Sei sicuro di voler rimuovere questa disponibilità?")) {
                 try {
                     await deleteDoc(doc(db, "availabilities", id));
                     loadCloudData();
@@ -971,7 +1145,7 @@
                             <hr class="my-2">
                             <small class="fw-bold">Squadra Operativa:</small>
                             <ul class="list-unstyled small mt-1 mb-0">
-                                ${hs.volontariDettaglio ? hs.volontariDettaglio.map(v => `<li>� ${v.nome} (${v.ruoloOperativo})</li>`).join('') : ''}
+                                ${hs.volontariDettaglio ? hs.volontariDettaglio.map(v => `<li>• ${v.nome} (${v.ruoloOperativo})</li>`).join('') : ''}
                             </ul>
                         </div>
                         ${isAdmin ? `
@@ -1041,7 +1215,7 @@
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-plus-circle me-2"></i>Inserimento Nuovo Mezzo</h4>
                     <form onsubmit="addVehicle(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto del Mezzo (Obbligatoria)*</label>
+                            <label class="form-label fw-bold">Foto del Mezzo (Obbligatoria)* - Verrà compressa automaticamente</label>
                             <input type="file" id="vFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
@@ -1185,7 +1359,7 @@
                         <div>
                             ${r.fotoScontrino ? `<img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Scontrino Rifornimento">` : ''}
                             <h5 class="fw-bold mb-1">${r.mezzo}</h5>
-                            <span class="badge bg-warning text-dark mb-2">� ${r.importo} (${r.litri} Litri)</span>
+                            <span class="badge bg-warning text-dark mb-2">€ ${r.importo} (${r.litri} Litri)</span>
                             <p class="small text-muted mb-1"><strong>Data / Ora:</strong> ${r.data} - ${r.ora}</p>
                             <p class="small text-muted mb-0"><strong>Registrato da:</strong> ${r.volontario}</p>
                         </div>
@@ -1205,7 +1379,7 @@
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-fuel-pump me-2"></i>Registra Nuovo Rifornimento</h4>
                     <form onsubmit="addRefuel(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto dello Scontrino (Obbligatoria)*</label>
+                            <label class="form-label fw-bold">Foto dello Scontrino (Obbligatoria)* - Verrà compressa automaticamente</label>
                             <input type="file" id="refFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
@@ -1231,7 +1405,7 @@
                                 <input type="number" step="0.01" id="refLitri" class="form-control" placeholder="es. 45.5" required>
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label class="form-label">Importo Totale (�)*</label>
+                                <label class="form-label">Importo Totale (€)*</label>
                                 <input type="number" step="0.01" id="refImporto" class="form-control" placeholder="es. 75.00" required>
                             </div>
                         </div>
@@ -1244,7 +1418,7 @@
                     <div class="row">${historyRefuelsHTML.length > 0 ? historyRefuelsHTML : '<div class="col-12 text-muted">Nessun rifornimento registrato nello storico.</div>'}</div>
                 ` : `
                     <div class="alert alert-info">
-                        <i class="bi bi-info-circle me-2"></i>Puoi inserire liberamente i rifornimenti dei mezzi tramite il modulo sopra. Lo storico completo � riservato ai responsabili dell'associazione.
+                        <i class="bi bi-info-circle me-2"></i>Puoi inserire liberamente i rifornimenti dei mezzi tramite il modulo sopra. Lo storico completo è riservato ai responsabili dell'associazione.
                     </div>
                 `}
             `;
@@ -1298,7 +1472,7 @@
                     <h4 class="fw-bold text-primary mb-3"><i class="bi bi-geo-alt-fill me-2"></i>Aggiungi Punto Rifornimento Idrico</h4>
                     <form onsubmit="addWaterPoint(event)">
                         <div class="mb-3">
-                            <label class="form-label fw-bold">Foto del Punto Idrico (Obbligatoria)*</label>
+                            <label class="form-label fw-bold">Foto del Punto Idrico (Obbligatoria)* - Verrà compressa automaticamente</label>
                             <input type="file" id="wpFoto" accept="image/*" class="form-control" required>
                         </div>
                         <div class="row">
@@ -1333,7 +1507,7 @@
                             </div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label">Note Tecniche (Attacchi, Pressione, Accessibilit�)</label>
+                            <label class="form-label">Note Tecniche (Attacchi, Pressione, Accessibilità)</label>
                             <input type="text" id="wpNote" class="form-control" placeholder="es. Attacco UNI 45">
                         </div>
                         <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva Punto Idrico</button>
@@ -1341,7 +1515,7 @@
                 </div>
                 ` : `
                 <div class="alert alert-info mb-4">
-                    <i class="bi bi-info-circle me-2"></i>La mappa idrica � consultabile da tutti i volontari. L'inserimento dei punti � riservato al <strong>Responsabile AIB</strong> e al <strong>Responsabile App</strong>.
+                    <i class="bi bi-info-circle me-2"></i>La mappa idrica è consultabile da tutti i volontari. L'inserimento dei punti è riservato al <strong>Responsabile AIB</strong> e al <strong>Responsabile App</strong>.
                 </div>
                 `}
 
@@ -1367,7 +1541,7 @@
                     alert("Impossibile rilevare la posizione GPS: " + error.message);
                 });
             } else {
-                alert("La geolocalizzazione non � supportata dal browser.");
+                alert("La geolocalizzazione non è supportata dal browser.");
             }
         }
 
@@ -1504,7 +1678,7 @@
                             <div class="col-md-6 mb-3"><label>Categoria*</label><input type="text" id="matCat" class="form-control" placeholder="es. Attrezzatura AIB, DPI" required></div>
                         </div>
                         <div class="row">
-                            <div class="col-md-6 mb-3"><label>Quantit� Iniziale*</label><input type="number" id="matQta" class="form-control" required></div>
+                            <div class="col-md-6 mb-3"><label>Quantità Iniziale*</label><input type="number" id="matQta" class="form-control" required></div>
                             <div class="col-md-6 mb-3"><label>Soglia Scorta Minima*</label><input type="number" id="matScorta" class="form-control" required></div>
                         </div>
                         <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva in Magazzino</button>
