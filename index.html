@@ -42,7 +42,7 @@
         .nav-pills .nav-link.active { background-color: #0d3b66 !important; color: white !important; }
         #map { height: 450px; width: 100%; border-radius: 12px; }
         
-        /* Stile Striscia Blu In Basso per Contatore Online */
+        /* Stile Striscia Blu In Basso per Contatore Online e Rating */
         .online-bar {
             position: fixed;
             bottom: 0;
@@ -88,7 +88,7 @@
             <div id="userInfo" class="d-none align-items-center gap-2">
                 <!-- Pulsante Archivio Report (Visibile solo ai Responsabili) -->
                 <div id="archiveBtnContainer"></div>
-                <!-- Pulsante Genera Word (Visibile solo al Responsabile App) -->
+                <!-- Pulsante Genera Word & Feedback (Visibile solo al Responsabile App) -->
                 <div id="creatorReportBtnContainer"></div>
                 <span class="badge badge-role" id="userRoleBadge"></span>
                 <button class="btn btn-outline-light btn-sm" onclick="logout()">Esci</button>
@@ -100,11 +100,17 @@
         <!-- Verrà popolato via JavaScript -->
     </div>
 
-    <!-- Barra Fissa In Basso per Volontari Online -->
+    <!-- Barra Fissa In Basso per Volontari Online e Rating Feedback -->
     <div id="onlineBar" class="online-bar d-none d-flex justify-content-between align-items-center">
-        <div>
-            <span class="online-indicator"></span>
-            <span>Volontari attualmente online: <strong id="onlineCount">1</strong></span>
+        <div class="d-flex align-items-center gap-3">
+            <div>
+                <span class="online-indicator"></span>
+                <span>Volontari online: <strong id="onlineCount">1</strong></span>
+            </div>
+            <div class="border-start border-light opacity-50 ps-3" style="height: 15px;"></div>
+            <div id="feedbackRatingContainer">
+                <span id="feedbackRatingText" class="fw-bold text-warning"><i class="bi bi-star-fill me-1"></i> Valutazione PWA: -- / 5</span>
+            </div>
         </div>
         <div class="small opacity-75 d-none d-sm-block">
             N.O.E. Rieti 210 &bull; Sistema Cloud
@@ -272,7 +278,7 @@
             }
         }
 
-        window.renderOnlineCounter = function() {
+        window.renderOnlineCounter = async function() {
             const onlineBar = document.getElementById('onlineBar');
             if (!loggedUser) {
                 if (onlineBar) onlineBar.classList.add('d-none');
@@ -281,6 +287,7 @@
 
             if (onlineBar) onlineBar.classList.remove('d-none');
 
+            // Calcolo volontari online
             const fiveMinutesAgo = new Date().getTime() - (5 * 60 * 1000);
             const count = users.filter(u => u.lastSeen && u.lastSeen > fiveMinutesAgo).length;
             const finalCount = Math.max(1, count);
@@ -288,6 +295,25 @@
             const countElem = document.getElementById('onlineCount');
             if (countElem) {
                 countElem.innerText = finalCount;
+            }
+
+            // Calcolo media stelle dai feedback inviati
+            try {
+                const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
+                const feedbacks = fbSnap.docs.map(d => d.data());
+
+                const ratingElem = document.getElementById('feedbackRatingText');
+                if (ratingElem) {
+                    if (feedbacks.length > 0) {
+                        const sum = feedbacks.reduce((acc, f) => acc + (parseFloat(f.voto) || 0), 0);
+                        const avg = (sum / feedbacks.length).toFixed(1);
+                        ratingElem.innerHTML = `<i class="bi bi-star-fill me-1 text-warning"></i> Valutazione PWA: <strong>${avg}</strong> / 5 ⭐ (${feedbacks.length})`;
+                    } else {
+                        ratingElem.innerHTML = `<i class="bi bi-star me-1 text-warning"></i> Valutazione PWA: <strong>--</strong> / 5`;
+                    }
+                }
+            } catch (e) {
+                console.error("Errore calcolo media feedback:", e);
             }
         }
 
@@ -345,8 +371,7 @@
                 renderMainView();
             }
         }
-
-        window.renderLogin = function() {
+window.renderLogin = function() {
             document.getElementById('appContainer').innerHTML = `
                 <div class="row justify-content-center">
                     <div class="col-md-5">
@@ -919,8 +944,7 @@
                 }
             }
         }
-
-        // --- SEZIONE ANAGRAFICA ---
+// --- SEZIONE ANAGRAFICA ---
         window.renderAnagrafica = function() {
             const isAdmin = isSuperAdmin();
 
@@ -1832,7 +1856,7 @@
             }
         }
 
-        // --- SEZIONE ARCHIVIO REPORT MENSILI (RISERVATA AI RESPONSABILI / CREATORE) ---
+        // --- SEZIONE ARCHIVIO REPORT MENSILI ---
         window.renderArchivioReport = function() {
             if (!isManagerRole()) {
                 document.getElementById('appContainer').innerHTML = `<div class="alert alert-danger">Accesso non autorizzato. Area riservata ai Responsabili.</div>`;
@@ -1948,9 +1972,7 @@
                 }
             }
         }
-
-
-        // --- NUOVA SEZIONE: FEEDBACK MENSILE OBBLIGATORIO E DASHBOARD RISERVATA ---
+// --- SEZIONE FEEDBACK MENSILE OBBLIGATORIO E DASHBOARD RISERVATA ---
         window.checkMonthlyFeedback = async function() {
             if (!loggedUser || isManagerRole()) return false; // I responsabili non subiscono il blocco
 
@@ -1959,7 +1981,7 @@
             const currentMonthYear = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
             // Controllo finestra temporale: dal 15 al 20 del mese
-            if (day >= 15 && day <= 30) {
+            if (day >= 15 && day <= 20) {
                 try {
                     const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
                     const feedbacks = fbSnap.docs.map(d => d.data());
@@ -2078,7 +2100,6 @@
                 <div class="row">${feedbacks.length > 0 ? fbHTML : '<div class="col-12 text-muted">Nessun feedback ricevuto al momento.</div>'}</div>
             `;
         }
-
 
         // Avvio caricamento dati da Firebase all'apertura
         loadCloudData();
