@@ -222,7 +222,8 @@
                 reader.readAsDataURL(file);
             });
         }
-window.loadCloudData = async function() {
+
+        window.loadCloudData = async function() {
             try {
                 const usersSnap = await getDocs(collection(db, "users"));
                 users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -290,7 +291,7 @@ window.loadCloudData = async function() {
             }
         }
 
-        window.init = function() {
+        window.init = async function() {
             if (!loggedUser) {
                 renderLogin();
                 const onlineBar = document.getElementById('onlineBar');
@@ -310,6 +311,12 @@ window.loadCloudData = async function() {
                     }, 60000);
                 }
 
+                // CONTROLLO FEEDBACK OBBLIGATORIO (Dal 15 al 20 del mese)
+                const isBlocked = await checkMonthlyFeedback();
+                if (isBlocked) {
+                    return; // Interrompe il caricamento se il volontario non ha compilato il form
+                }
+
                 const archiveContainer = document.getElementById('archiveBtnContainer');
                 if (isManagerRole()) {
                     archiveContainer.innerHTML = `
@@ -327,6 +334,9 @@ window.loadCloudData = async function() {
                         <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="downloadWordReport()" title="Scarica Report Operativo Mensile Word">
                             <i class="bi bi-file-earmark-word-fill me-1"></i> Report Word (.doc)
                         </button>
+                        <button class="btn btn-outline-danger btn-sm fw-bold ms-1" onclick="renderAdminFeedbackDashboard()" title="Dashboard Feedback Riservata">
+                            <i class="bi bi-eye-slash-fill me-1"></i> Feedback
+                        </button>
                     `;
                 } else {
                     creatorContainer.innerHTML = '';
@@ -335,7 +345,8 @@ window.loadCloudData = async function() {
                 renderMainView();
             }
         }
-window.renderLogin = function() {
+
+        window.renderLogin = function() {
             document.getElementById('appContainer').innerHTML = `
                 <div class="row justify-content-center">
                     <div class="col-md-5">
@@ -492,7 +503,8 @@ window.renderLogin = function() {
                 }
             }
         }
-window.renderMainView = function() {
+
+        window.renderMainView = function() {
             const userName = `${loggedUser.nome} ${loggedUser.cognome}`;
             let unreadCount = announcements.filter(ann => {
                 let letti = ann.lettiDa || [];
@@ -907,7 +919,8 @@ window.renderMainView = function() {
                 }
             }
         }
-// --- SEZIONE ANAGRAFICA ---
+
+        // --- SEZIONE ANAGRAFICA ---
         window.renderAnagrafica = function() {
             const isAdmin = isSuperAdmin();
 
@@ -999,7 +1012,8 @@ window.renderMainView = function() {
                 }
             }
         }
-// --- SEZIONE TURNI & SERVIZI ---
+
+        // --- SEZIONE TURNI & SERVIZI ---
         window.renderTurni = function() {
             const isAdmin = isSuperAdmin();
 
@@ -1255,7 +1269,8 @@ window.renderMainView = function() {
                 console.error("Errore turno:", err);
             }
         }
-window.closeShiftModal = async function(shiftId, index) {
+
+        window.closeShiftModal = async function(shiftId, index) {
             const shiftToClose = shifts[index];
             const oraFineReale = prompt("Inserisci l'ora di fine effettiva del servizio (HH:MM):", shiftToClose.oraFine) || shiftToClose.oraFine;
 
@@ -1455,207 +1470,8 @@ window.closeShiftModal = async function(shiftId, index) {
                 }
             }
         }
-window.closeShiftModal = async function(shiftId, index) {
-            const shiftToClose = shifts[index];
-            const oraFineReale = prompt("Inserisci l'ora di fine effettiva del servizio (HH:MM):", shiftToClose.oraFine) || shiftToClose.oraFine;
 
-            let kmPercorsi = 0;
-            let kmFinali = 0;
-
-            if (shiftToClose.mezzoId && shiftToClose.mezzoId !== "Nessun Mezzo") {
-                const currentVehicle = vehicles.find(v => v.id === shiftToClose.mezzoId);
-                const kmAttuali = currentVehicle ? currentVehicle.km : (shiftToClose.kmInizialiMezzo || 0);
-
-                const kmFinaliInput = prompt(`Inserisci i KM FINALI segnati sul contachilometri del mezzo (${shiftToClose.mezzoUsato}). KM attuali registrati: ${kmAttuali}`, kmAttuali);
-                
-                if (kmFinaliInput !== null) {
-                    kmFinali = parseInt(kmFinaliInput, 10) || kmAttuali;
-                    if (kmFinali < kmAttuali) {
-                        alert("I KM finali non possono essere inferiori a quelli iniziali!");
-                        return;
-                    }
-                    kmPercorsi = kmFinali - kmAttuali;
-
-                    if (currentVehicle) {
-                        await updateDoc(doc(db, "vehicles", currentVehicle.id), { km: kmFinali });
-                    }
-                }
-            } else {
-                const kmManual = prompt("KM percorsi durante il servizio:", "0");
-                kmPercorsi = parseInt(kmManual, 10) || 0;
-            }
-
-            const completedShift = {
-                ...shiftToClose,
-                oraFine: oraFineReale,
-                kmFinaliMezzo: kmFinali,
-                kmPercorsi: kmPercorsi,
-                dataChiusura: new Date().toLocaleDateString('it-IT')
-            };
-
-            try {
-                await addDoc(collection(db, "historyShifts"), completedShift);
-                await deleteDoc(doc(db, "shifts", shiftId));
-                alert(`Servizio chiuso! Percorsi ${kmPercorsi} km. Chilometraggio del mezzo aggiornato nel database.`);
-                loadCloudData();
-            } catch (err) {
-                console.error("Errore chiusura:", err);
-            }
-        }
-
-        window.deleteActiveShift = async function(shiftId) {
-            if (confirm("Sei sicuro di voler eliminare questo turno in corso?")) {
-                try {
-                    await deleteDoc(doc(db, "shifts", shiftId));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione turno:", err);
-                }
-            }
-        }
-
-        // --- SEZIONE DISPONIBILITÀ ---
-        window.renderDisponibilita = function() {
-            const isAdmin = isSuperAdmin();
-
-            let listHTML = availabilities.map((a) => {
-                const isMine = a.userEmail === loggedUser.email;
-                return `
-                    <div class="col-md-4 mb-3">
-                        <div class="card p-3 border-start border-4 ${isMine ? 'border-success bg-light' : 'border-info'} h-100 d-flex flex-column justify-content-between">
-                            <div>
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <h6 class="fw-bold mb-0 text-primary">${a.userName}</h6>
-                                    ${isMine ? '<span class="badge bg-success">Tua Disponibilità</span>' : ''}
-                                </div>
-                                <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
-                                <p class="mb-1"><strong>Fascia Oraria:</strong> ${a.oraInizio} - ${a.oraFine}</p>
-                                <p class="mb-1 small text-muted"><strong>Note:</strong> ${a.note || 'Nessuna'}</p>
-                            </div>
-                            ${(isMine || isAdmin) ? `
-                                <div class="text-end mt-2">
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteAvailability('${a.id}')">
-                                        <i class="bi bi-trash"></i> Elimina
-                                    </button>
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            document.getElementById('tabContent').innerHTML = `
-                <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-check me-2"></i>Inserisci la tua Disponibilità</h4>
-                    <form onsubmit="addAvailability(event)">
-                        <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Data Disponibilità*</label>
-                                <input type="date" id="dispData" class="form-control" required>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Ora Inizio*</label>
-                                <input type="time" id="dispOraInizio" class="form-control" required>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Ora Fine*</label>
-                                <input type="time" id="dispOraFine" class="form-control" required>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Note / Eventuali limitazioni</label>
-                            <input type="text" id="dispNote" class="form-control" placeholder="es. Disponibile solo per servizi AIB">
-                        </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-plus-circle me-1"></i>Aggiungi Disponibilità</button>
-                    </form>
-                </div>
-
-                <h4 class="fw-bold mb-3">Calendario Disponibilità Operatori (${availabilities.length})</h4>
-                <div class="row">${listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessuna disponibilità comunicata.</div>'}</div>
-            `;
-
-            document.getElementById('dispData').value = new Date().toISOString().split('T')[0];
-        }
-
-        window.addAvailability = async function(e) {
-            e.preventDefault();
-            const newDisp = {
-                userEmail: loggedUser.email,
-                userName: `${loggedUser.nome} ${loggedUser.cognome}`,
-                data: document.getElementById('dispData').value,
-                oraInizio: document.getElementById('dispOraInizio').value,
-                oraFine: document.getElementById('dispOraFine').value,
-                note: document.getElementById('dispNote').value
-            };
-
-            try {
-                await addDoc(collection(db, "availabilities"), newDisp);
-                alert('Disponibilità inserita con successo!');
-                loadCloudData();
-            } catch (err) {
-                console.error("Errore disponibilità:", err);
-            }
-        }
-
-        window.deleteAvailability = async function(id) {
-            if(confirm("Sei sicuro di voler rimuovere questa disponibilità?")) {
-                try {
-                    await deleteDoc(doc(db, "availabilities", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione:", err);
-                }
-            }
-        }
-
-        // --- SEZIONE STORICO SERVIZI ---
-        window.renderStorico = function() {
-            const isAdmin = isSuperAdmin();
-
-            let histHTML = historyShifts.map((s) => `
-                <div class="col-md-6 mb-3">
-                    <div class="card p-3 border-start border-4 border-secondary h-100">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="fw-bold text-secondary mb-0">${s.tipoServizio}</h5>
-                            <span class="badge bg-secondary">Concluso</span>
-                        </div>
-                        <p class="mb-1"><strong>Data Servizio:</strong> ${s.data} (Chiuso il: ${s.dataChiusura || 'N/D'})</p>
-                        <p class="mb-1"><strong>Orario effettivo:</strong> ${s.oraInizio} - ${s.oraFine}</p>
-                        <p class="mb-1"><strong>Mezzo impiegato:</strong> ${s.mezzoUsato || 'Nessuno'} | <strong>KM percorsi:</strong> ${s.kmPercorsi || 0} km</p>
-                        <p class="mb-1"><strong>Note:</strong> ${s.note || 'Nessuna'}</p>
-                        <hr class="my-2">
-                        <strong>Squadra Impiegata:</strong>
-                        <ul class="list-unstyled mt-1 small mb-0">
-                            ${s.volontariDettaglio ? s.volontariDettaglio.map(v => `<li><i class="bi bi-person-check me-1"></i>${v.nome} - <em>${v.ruoloOperativo}</em></li>`).join('') : ''}
-                        </ul>
-                        ${isAdmin ? `
-                            <div class="text-end mt-2 pt-2 border-top">
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteHistoryShift('${s.id}')">
-                                    <i class="bi bi-trash"></i> Elimina dallo Storico
-                                </button>
-                            </div>
-                        ` : ''}
-                    </div>
-                </div>
-            `).join('');
-
-            document.getElementById('tabContent').innerHTML = `
-                <h4 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Storico Servizi Conclusi (${historyShifts.length})</h4>
-                <div class="row">${historyShifts.length > 0 ? histHTML : '<div class="col-12 text-muted">Nessun servizio nello storico.</div>'}</div>
-            `;
-        }
-
-        window.deleteHistoryShift = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questo record dallo storico?")) {
-                try {
-                    await deleteDoc(doc(db, "historyShifts", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione storico:", err);
-                }
-            }
-        }
-// --- SEZIONE MEZZI & SCADENZE ---
+        // --- SEZIONE MEZZI & SCADENZE ---
         window.renderMezzi = function() {
             const isAdmin = isSuperAdmin();
 
@@ -1873,7 +1689,8 @@ window.closeShiftModal = async function(shiftId, index) {
                 }
             }
         }
-// --- SEZIONE MAPPA IDRICA ---
+
+        // --- SEZIONE MAPPA IDRICA ---
         window.renderMappa = function() {
             const isAdmin = isSuperAdmin();
 
@@ -2131,6 +1948,137 @@ window.closeShiftModal = async function(shiftId, index) {
                 }
             }
         }
+
+
+        // --- NUOVA SEZIONE: FEEDBACK MENSILE OBBLIGATORIO E DASHBOARD RISERVATA ---
+        window.checkMonthlyFeedback = async function() {
+            if (!loggedUser || isManagerRole()) return false; // I responsabili non subiscono il blocco
+
+            const today = new Date();
+            const day = today.getDate();
+            const currentMonthYear = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
+
+            // Controllo finestra temporale: dal 15 al 20 del mese
+            if (day >= 15 && day <= 20) {
+                try {
+                    const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
+                    const feedbacks = fbSnap.docs.map(d => d.data());
+                    
+                    const alreadySubmitted = feedbacks.some(f => f.userEmail === loggedUser.email && f.periodo === currentMonthYear);
+
+                    if (!alreadySubmitted) {
+                        renderFeedbackModal(currentMonthYear);
+                        return true; // Blocca l'app
+                    }
+                } catch (e) {
+                    console.error("Errore controllo feedback obbligatorio:", e);
+                }
+            }
+            return false;
+        }
+
+        window.renderFeedbackModal = function(periodo) {
+            document.getElementById('appContainer').innerHTML = `
+                <div class="row justify-content-center">
+                    <div class="col-md-7">
+                        <div class="card p-4 border-danger shadow-lg">
+                            <div class="text-center mb-3">
+                                <span class="badge bg-danger p-2 mb-2 fs-6"><i class="bi bi-exclamation-triangle-fill me-1"></i> Adempimento Mensile Obbligatorio</span>
+                                <h3 class="fw-bold text-primary">Valutazione e Suggerimenti PWA</h3>
+                                <p class="text-muted small">Periodo di riferimento: <strong>${periodo}</strong> (Finestra utile: dal 15 al 20 del mese)</p>
+                                <div class="alert alert-warning small text-start">
+                                    <i class="bi bi-info-circle-fill me-1"></i> Questo modulo è indispensabile per mantenere attiva la tua operatività sulla piattaforma. Il sistema garantisce l'anonimato del parere espresso.
+                                </div>
+                            </div>
+                            <form onsubmit="submitMonthlyFeedback(event, '${periodo}')">
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">1. Come valuti l'esperienza d'uso generale della PWA?*</label>
+                                    <select id="fbVoto" class="form-select" required>
+                                        <option value="5">⭐⭐⭐⭐⭐ - Ottima, tutto perfetto</option>
+                                        <option value="4">⭐⭐⭐⭐ - Buona</option>
+                                        <option value="3">⭐⭐⭐ - Sufficiente, migliorabile</option>
+                                        <option value="2">⭐⭐ - Scarsa</option>
+                                        <option value="1">⭐ - Molto problematica</option>
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">2. Quali funzioni trovi più utili e cosa ti piace di più?</label>
+                                    <textarea id="fbPiace" class="form-control" rows="2" placeholder="Es. Gestione turni, mappa idrica..." required></textarea>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label fw-bold">3. Suggerimenti, critiche costruttive o problemi riscontrati:*</label>
+                                    <textarea id="fbMigliorie" class="form-control" rows="3" placeholder="Scrivi qui eventuali migliorie o malfunzionamenti..." required></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-pc w-100 fw-bold py-2 shadow-sm">
+                                    <i class="bi bi-send-check-fill me-1"></i> Invia Valutazione e sblocca l'app
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        window.submitMonthlyFeedback = async function(e, periodo) {
+            e.preventDefault();
+            try {
+                const feedbackData = {
+                    periodo: periodo,
+                    voto: document.getElementById('fbVoto').value,
+                    cosaPiace: document.getElementById('fbPiace').value,
+                    migliorie: document.getElementById('fbMigliorie').value,
+                    dataInvio: new Date().toLocaleString('it-IT'),
+                    userEmail: loggedUser.email,
+                    userName: `${loggedUser.nome} ${loggedUser.cognome}`
+                };
+
+                await addDoc(collection(db, "monthlyFeedbacks"), feedbackData);
+                alert("Grazie! Questionario registrato con successo. L'applicazione è ora sbloccata.");
+                loadCloudData();
+            } catch (err) {
+                console.error("Errore invio feedback:", err);
+                alert("Errore durante l'invio. Riprova.");
+            }
+        }
+
+        window.renderAdminFeedbackDashboard = async function() {
+            if (!isAppCreator()) {
+                alert("Area riservata.");
+                return;
+            }
+
+            const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
+            const feedbacks = fbSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+
+            let fbHTML = feedbacks.map(f => `
+                <div class="col-md-6 mb-3">
+                    <div class="card p-3 border-start border-4 border-warning h-100">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="badge bg-dark">${f.periodo}</span>
+                            <small class="text-muted">Inviato il: ${f.dataInvio}</small>
+                        </div>
+                        <h5 class="fw-bold text-danger mb-2"><i class="bi bi-person-fill-lock me-1"></i>Autore Reale: ${f.userName}</h5>
+                        <p class="mb-1"><strong>Voto:</strong> ${f.voto} / 5</p>
+                        <p class="mb-1"><strong>Cosa piace:</strong> ${f.cosaPiace || 'Nessuna nota'}</p>
+                        <p class="mb-1"><strong>Suggerimenti/Problemi:</strong> ${f.migliorie || 'Nessuna nota'}</p>
+                    </div>
+                </div>
+            `).join('');
+
+            document.getElementById('appContainer').innerHTML = `
+                <div class="mb-3">
+                    <button class="btn btn-outline-secondary btn-sm" onclick="switchTab('bacheca')">
+                        <i class="bi bi-arrow-left me-1"></i> Torna alla Bacheca
+                    </button>
+                </div>
+                <h4 class="fw-bold mb-3"><i class="bi bi-eye-slash-fill me-2"></i>Dashboard Segreta: Feedback Volontari (${feedbacks.length})</h4>
+                <div class="alert alert-warning">
+                    <i class="bi bi-shield-lock-fill me-2"></i><strong>Area Riservata:</strong> Per i volontari il form risulta completamente anonimo, ma qui puoi visualizzare esattamente chi ha scritto cosa per un confronto mirato.
+                </div>
+                <div class="row">${feedbacks.length > 0 ? fbHTML : '<div class="col-12 text-muted">Nessun feedback ricevuto al momento.</div>'}</div>
+            `;
+        }
+
 
         // Avvio caricamento dati da Firebase all'apertura
         loadCloudData();
