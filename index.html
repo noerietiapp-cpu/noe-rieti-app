@@ -275,9 +275,7 @@
                     uploadedReports = repSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 } catch(e) { uploadedReports = []; }
 
-                // Applicazione automatica tema personalizzato se salvato nel cloud
                 applyCloudTheme();
-
                 init();
             } catch (err) {
                 console.error("Errore di connessione a Firestore: ", err);
@@ -332,6 +330,57 @@
                 console.error("Errore calcolo media feedback:", e);
             }
         }
+
+        window.openThemeCustomizer = function() {
+            if (!isAppCreator()) return;
+            
+            const currentBlue = getComputedStyle(document.documentElement).getPropertyValue('--pc-blue').trim() || '#0d3b66';
+            const newColor = prompt("Inserisci il codice esadecimale del nuovo colore principale dell'app (es. #0d3b66 per blu, #1b4332 per verde scuro, #3f37c9 per viola):", currentBlue);
+            
+            if (newColor && newColor.startsWith('#')) {
+                saveThemeToCloud(newColor);
+            } else if (newColor !== null) {
+                alert("Formato colore non valido. Usa il formato esadecimale es. #0d3b66");
+            }
+        }
+
+        window.saveThemeToCloud = async function(colorHex) {
+            try {
+                const settingsRef = doc(db, "appSettings", "themeConfig");
+                await updateDoc(settingsRef, { primaryColor: colorHex }).catch(async () => {
+                    const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+                    await setDoc(settingsRef, { primaryColor: colorHex });
+                });
+
+                applyThemeColor(colorHex);
+                alert("Tema di colore aggiornato e salvato con successo nel Cloud per tutti gli utenti!");
+            } catch (err) {
+                console.error("Errore salvataggio tema:", err);
+                applyThemeColor(colorHex);
+                alert("Colore applicato localmente.");
+            }
+        }
+
+        window.applyThemeColor = function(colorHex) {
+            document.documentElement.style.setProperty('--pc-blue', colorHex);
+            localStorage.setItem('noe_theme_color', colorHex);
+        }
+
+        window.applyCloudTheme = async function() {
+            try {
+                const settingsSnap = await getDocs(collection(db, "appSettings"));
+                const settingDoc = settingsSnap.docs.find(d => d.id === "themeConfig");
+                if (settingDoc && settingDoc.data().primaryColor) {
+                    applyThemeColor(settingDoc.data().primaryColor);
+                } else {
+                    const localColor = localStorage.getItem('noe_theme_color');
+                    if (localColor) applyThemeColor(localColor);
+                }
+            } catch (e) {
+                const localColor = localStorage.getItem('noe_theme_color');
+                if (localColor) applyThemeColor(localColor);
+            }
+        }
 window.init = async function() {
             if (!loggedUser) {
                 renderLogin();
@@ -355,7 +404,7 @@ window.init = async function() {
                 // CONTROLLO FEEDBACK OBBLIGATORIO (Dal 15 al 20 del mese)
                 const isBlocked = await checkMonthlyFeedback();
                 if (isBlocked) {
-                    return; // Interrompe il caricamento se il volontario non ha compilato il form
+                    return;
                 }
 
                 const archiveContainer = document.getElementById('archiveBtnContainer');
@@ -390,61 +439,7 @@ window.init = async function() {
             }
         }
 
-        // Funzione esclusiva Creatore App per personalizzare e salvare i colori nel Cloud
-        window.openThemeCustomizer = function() {
-            if (!isAppCreator()) return;
-            
-            const currentBlue = getComputedStyle(document.documentElement).getPropertyValue('--pc-blue').trim() || '#0d3b66';
-            const newColor = prompt("Inserisci il codice esadecimale del nuovo colore principale dell'app (es. #0d3b66 per blu, #1b4332 per verde scuro, #3f37c9 per viola):", currentBlue);
-            
-            if (newColor && newColor.startsWith('#')) {
-                saveThemeToCloud(newColor);
-            } else if (newColor !== null) {
-                alert("Formato colore non valido. Usa il formato esadecimale es. #0d3b66");
-            }
-        }
-
-        window.saveThemeToCloud = async function(colorHex) {
-            try {
-                // Salviamo le impostazioni di tema in una collezione dedicata o aggiorniamo un documento globale
-                const settingsRef = doc(db, "appSettings", "themeConfig");
-                // Verifichiamo se esiste, altrimenti lo creiamo
-                await updateDoc(settingsRef, { primaryColor: colorHex }).catch(async () => {
-                    const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
-                    await setDoc(settingsRef, { primaryColor: colorHex });
-                });
-
-                applyThemeColor(colorHex);
-                alert("Tema di colore aggiornato e salvato con successo nel Cloud per tutti gli utenti!");
-            } catch (err) {
-                console.error("Errore salvataggio tema:", err);
-                // Fallback locale immediato se Firestore non è configurato per settings
-                applyThemeColor(colorHex);
-                alert("Colore applicato localmente.");
-            }
-        }
-
-        window.applyThemeColor = function(colorHex) {
-            document.documentElement.style.setProperty('--pc-blue', colorHex);
-            localStorage.setItem('noe_theme_color', colorHex);
-        }
-
-        window.applyCloudTheme = async function() {
-            try {
-                const settingsSnap = await getDocs(collection(db, "appSettings"));
-                const settingDoc = settingsSnap.docs.find(d => d.id === "themeConfig");
-                if (settingDoc && settingDoc.data().primaryColor) {
-                    applyThemeColor(settingDoc.data().primaryColor);
-                } else {
-                    const localColor = localStorage.getItem('noe_theme_color');
-                    if (localColor) applyThemeColor(localColor);
-                }
-            } catch (e) {
-                const localColor = localStorage.getItem('noe_theme_color');
-                if (localColor) applyThemeColor(localColor);
-            }
-        }
-window.renderLogin = function() {
+        window.renderLogin = function() {
             document.getElementById('appContainer').innerHTML = `
                 <div class="row justify-content-center">
                     <div class="col-md-5">
@@ -574,7 +569,8 @@ window.renderLogin = function() {
             if (onlineBar) onlineBar.classList.add('d-none');
             renderLogin();
         }
-window.switchTab = function(tab) {
+
+        window.switchTab = function(tab) {
             activeTab = tab;
             if (tab === 'bacheca') {
                 markAllAnnouncementsAsRead();
@@ -1573,19 +1569,24 @@ window.switchTab = function(tab) {
             let vehiclesHTML = vehicles.map((v) => {
                 return `
                     <div class="col-md-4 mb-3">
-                        <div class="card p-3 h-100">
-                            <img src="${v.foto}" class="vehicle-img mb-3" alt="Foto Mezzo">
-                            <h4 class="fw-bold text-primary mb-1">${v.modello}</h4>
-                            <p class="mb-1"><strong>Targa:</strong> ${v.targa}</p>
-                            <p class="mb-1"><strong>Chilometraggio:</strong> ${v.km} km</p>
-                            <hr class="my-2">
-                            <p class="mb-1 text-danger small"><strong>Assicurazione Scadenza:</strong> ${v.scadAssicurazione || 'Non indicata'}</p>
-                            <p class="mb-1 text-danger small"><strong>Revisione Scadenza:</strong> ${v.scadRevisione || 'Non indicata'}</p>
-                            <p class="mb-1 text-danger small"><strong>Tagliando Scadenza:</strong> ${v.scadTagliando || 'Non indicato'}</p>
+                        <div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                            <div>
+                                <img src="${v.foto}" class="vehicle-img mb-3" alt="Foto Mezzo">
+                                <h4 class="fw-bold text-primary mb-1">${v.modello}</h4>
+                                <p class="mb-1"><strong>Targa:</strong> ${v.targa}</p>
+                                <p class="mb-1"><strong>Chilometraggio:</strong> ${v.km} km</p>
+                                <hr class="my-2">
+                                <p class="mb-1 text-danger small"><strong>Assicurazione Scadenza:</strong> ${v.scadAssicurazione || 'Non indicata'}</p>
+                                <p class="mb-1 text-danger small"><strong>Revisione Scadenza:</strong> ${v.scadRevisione || 'Non indicata'}</p>
+                                <p class="mb-1 text-danger small"><strong>Tagliando Scadenza:</strong> ${v.scadTagliando || 'Non indicato'}</p>
+                            </div>
                             ${isAdmin ? `
-                                <div class="mt-3 pt-2 border-top">
-                                    <button class="btn btn-outline-danger btn-sm w-100" onclick="deleteVehicle('${v.id}')">
-                                        <i class="bi bi-trash me-1"></i>Elimina Mezzo
+                                <div class="mt-3 pt-2 border-top d-flex gap-2">
+                                    <button class="btn btn-outline-primary btn-sm w-50" onclick="editVehicle('${v.id}')">
+                                        <i class="bi bi-pencil-square me-1"></i>Modifica
+                                    </button>
+                                    <button class="btn btn-outline-danger btn-sm w-50" onclick="deleteVehicle('${v.id}')">
+                                        <i class="bi bi-trash me-1"></i>Elimina
                                     </button>
                                 </div>
                             ` : ''}
@@ -1666,6 +1667,31 @@ window.switchTab = function(tab) {
             }
         }
 
+        window.editVehicle = async function(id) {
+            const v = vehicles.find(item => item.id === id);
+            if (!v) return;
+
+            const newKm = prompt("Aggiorna il chilometraggio attuale:", v.km);
+            const newAss = prompt("Aggiorna scadenza Assicurazione (AAAA-MM-GG):", v.scadAssicurazione || "");
+            const newRev = prompt("Aggiorna scadenza Revisione (AAAA-MM-GG):", v.scadRevisione || "");
+            const newTag = prompt("Aggiorna scadenza Tagliando (AAAA-MM-GG):", v.scadTagliando || "");
+
+            if (newKm !== null) {
+                try {
+                    await updateDoc(doc(db, "vehicles", id), {
+                        km: parseInt(newKm, 10) || v.km,
+                        scadAssicurazione: newAss,
+                        scadRevisione: newRev,
+                        scadTagliando: newTag
+                    });
+                    alert("Mezzo aggiornato con successo!");
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore modifica mezzo:", err);
+                }
+            }
+        }
+
         window.deleteVehicle = async function(id) {
             if (confirm("Sei sicuro di voler eliminare questo mezzo dalla flotta?")) {
                 try {
@@ -1682,16 +1708,21 @@ window.switchTab = function(tab) {
 
             let refHTML = refuels.map((r) => `
                 <div class="col-md-4 mb-3">
-                    <div class="card p-3 h-100">
-                        <img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Foto Scontrino">
-                        <h5 class="fw-bold text-primary mb-1">${r.mezzo}</h5>
-                        <p class="mb-1"><strong>Data / Ora:</strong> ${r.data} - ${r.ora}</p>
-                        <p class="mb-1"><strong>Litri:</strong> ${r.litri} L | <strong>Importo:</strong> &euro; ${r.importo.toFixed(2)}</p>
-                        <p class="mb-1 small text-muted"><strong>Registrato da:</strong> ${r.volontario}</p>
+                    <div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Foto Scontrino">
+                            <h5 class="fw-bold text-primary mb-1">${r.mezzo}</h5>
+                            <p class="mb-1"><strong>Data / Ora:</strong> ${r.data} - ${r.ora}</p>
+                            <p class="mb-1"><strong>Litri:</strong> ${r.litri} L | <strong>Importo:</strong> &euro; ${r.importo.toFixed(2)}</p>
+                            <p class="mb-1 small text-muted"><strong>Registrato da:</strong> ${r.volontario}</p>
+                        </div>
                         ${isAdmin ? `
-                            <div class="text-end mt-2 pt-2 border-top">
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteRefuel('${r.id}')">
-                                    <i class="bi bi-trash"></i> Elimina
+                            <div class="text-end mt-2 pt-2 border-top d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary w-50" onclick="editRefuel('${r.id}')">
+                                    <i class="bi bi-pencil-square me-1"></i>Modifica
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger w-50" onclick="deleteRefuel('${r.id}')">
+                                    <i class="bi bi-trash me-1"></i>Elimina
                                 </button>
                             </div>
                         ` : ''}
@@ -1773,6 +1804,27 @@ window.switchTab = function(tab) {
             }
         }
 
+        window.editRefuel = async function(id) {
+            const r = refuels.find(item => item.id === id);
+            if (!r) return;
+
+            const newLitri = prompt("Modifica litri erogati:", r.litri);
+            const newImporto = prompt("Modifica importo totale (€):", r.importo);
+
+            if (newLitri !== null && newImporto !== null) {
+                try {
+                    await updateDoc(doc(db, "refuels", id), {
+                        litri: parseFloat(newLitri) || r.litri,
+                        importo: parseFloat(newImporto) || r.importo
+                    });
+                    alert("Rifornimento aggiornato!");
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore modifica rifornimento:", err);
+                }
+            }
+        }
+
         window.deleteRefuel = async function(id) {
             if (confirm("Sei sicuro di voler eliminare questo rifornimento?")) {
                 try {
@@ -1790,16 +1842,21 @@ window.switchTab = function(tab) {
 
             let wpHTML = waterPoints.map((wp) => `
                 <div class="col-md-4 mb-3">
-                    <div class="card p-3 h-100">
-                        <img src="${wp.foto}" class="hydrant-img mb-2" alt="Foto Punto Acqua">
-                        <h5 class="fw-bold text-primary mb-1">${wp.nome}</h5>
-                        <p class="mb-1"><strong>Tipo:</strong> ${wp.tipo}</p>
-                        <p class="mb-1"><strong>Portata / Note:</strong> ${wp.portata || 'N/D'}</p>
-                        <p class="mb-1 small text-muted"><strong>Coordinate:</strong> ${wp.lat.toFixed(4)}, ${wp.lng.toFixed(4)}</p>
+                    <div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <img src="${wp.foto}" class="hydrant-img mb-2" alt="Foto Punto Acqua">
+                            <h5 class="fw-bold text-primary mb-1">${wp.nome}</h5>
+                            <p class="mb-1"><strong>Tipo:</strong> ${wp.tipo}</p>
+                            <p class="mb-1"><strong>Portata / Note:</strong> ${wp.portata || 'N/D'}</p>
+                            <p class="mb-1 small text-muted"><strong>Coordinate:</strong> ${wp.lat.toFixed(4)}, ${wp.lng.toFixed(4)}</p>
+                        </div>
                         ${isAdmin ? `
-                            <div class="text-end mt-2 pt-2 border-top">
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteWaterPoint('${wp.id}')">
-                                    <i class="bi bi-trash"></i> Elimina
+                            <div class="text-end mt-2 pt-2 border-top d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary w-50" onclick="editWaterPoint('${wp.id}')">
+                                    <i class="bi bi-pencil-square me-1"></i>Modifica
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger w-50" onclick="deleteWaterPoint('${wp.id}')">
+                                    <i class="bi bi-trash me-1"></i>Elimina
                                 </button>
                             </div>
                         ` : ''}
@@ -1912,6 +1969,27 @@ window.switchTab = function(tab) {
                 loadCloudData();
             } catch (err) {
                 console.error("Errore punto idrico:", err);
+            }
+        }
+
+        window.editWaterPoint = async function(id) {
+            const wp = waterPoints.find(item => item.id === id);
+            if (!wp) return;
+
+            const newNome = prompt("Modifica nome / identificativo:", wp.nome);
+            const newPortata = prompt("Modifica portata / note:", wp.portata || "");
+
+            if (newNome !== null) {
+                try {
+                    await updateDoc(doc(db, "waterPoints", id), {
+                        nome: newNome,
+                        portata: newPortata
+                    });
+                    alert("Punto idrico aggiornato!");
+                    loadCloudData();
+                } catch (err) {
+                    console.error("Errore modifica punto idrico:", err);
+                }
             }
         }
 
@@ -2042,15 +2120,15 @@ window.switchTab = function(tab) {
                 }
             }
         }
-// --- SEZIONE FEEDBACK MENSILE OBBLIGATORIO E DASHBOARD RISERVATA ---
+
+        // --- SEZIONE FEEDBACK MENSILE OBBLIGATORIO E DASHBOARD RISERVATA ---
         window.checkMonthlyFeedback = async function() {
-            if (!loggedUser || isManagerRole()) return false; // I responsabili non subiscono il blocco
+            if (!loggedUser || isManagerRole()) return false;
 
             const today = new Date();
             const day = today.getDate();
             const currentMonthYear = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
-            // Controllo finestra temporale: dal 15 al 20 del mese
             if (day >= 15 && day <= 20) {
                 try {
                     const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
@@ -2060,7 +2138,7 @@ window.switchTab = function(tab) {
 
                     if (!alreadySubmitted) {
                         renderFeedbackModal(currentMonthYear);
-                        return true; // Blocca l'app
+                        return true;
                     }
                 } catch (e) {
                     console.error("Errore controllo feedback obbligatorio:", e);
