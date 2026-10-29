@@ -1959,7 +1959,7 @@
             const currentMonthYear = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
             // Controllo finestra temporale: dal 15 al 20 del mese
-            if (day >= 15 && day <= 20) {
+            if (day >= 15 && day <= 30) {
                 try {
                     const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
                     const feedbacks = fbSnap.docs.map(d => d.data());
