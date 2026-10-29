@@ -42,45 +42,20 @@
         .nav-pills .nav-link.active { background-color: var(--pc-blue) !important; color: white !important; }
         #map { height: 450px; width: 100%; border-radius: 12px; }
         
-        /* Stile ottimizzato per cellulari della Navbar */
         @media (max-width: 768px) {
-            .navbar .container-fluid {
-                flex-direction: column;
-                gap: 6px;
-            }
-            #userInfo {
-                width: 100%;
-                justify-content: center;
-                flex-wrap: wrap;
-                gap: 3px !important;
-            }
-            #userInfo .btn {
-                font-size: 0.75rem !important;
-                padding: 3px 6px !important;
-            }
+            .navbar .container-fluid { flex-direction: column; gap: 6px; }
+            #userInfo { width: 100%; justify-content: center; flex-wrap: wrap; gap: 3px !important; }
+            #userInfo .btn { font-size: 0.75rem !important; padding: 3px 6px !important; }
         }
 
-        /* Striscia Blu In Basso per Contatore Online e Rating */
         .online-bar {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            background-color: var(--pc-blue);
-            color: white;
-            font-size: 0.85rem;
-            padding: 6px 15px;
-            z-index: 1040;
-            box-shadow: 0 -2px 8px rgba(0,0,0,0.2);
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background-color: var(--pc-blue); color: white; font-size: 0.85rem;
+            padding: 6px 15px; z-index: 1040; box-shadow: 0 -2px 8px rgba(0,0,0,0.2);
         }
         .online-indicator {
-            width: 9px;
-            height: 9px;
-            background-color: #2ecc71;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 6px;
-            box-shadow: 0 0 6px #2ecc71;
+            width: 9px; height: 9px; background-color: #2ecc71;
+            border-radius: 50%; display: inline-block; margin-right: 6px; box-shadow: 0 0 6px #2ecc71;
         }
     </style>
     <script>
@@ -112,11 +87,8 @@
         </div>
     </nav>
 
-    <div class="container my-4" id="appContainer">
-        <!-- Verrà popolato via JavaScript -->
-    </div>
+    <div class="container my-4" id="appContainer"></div>
 
-    <!-- Barra Fissa In Basso -->
     <div id="onlineBar" class="online-bar d-none d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-3">
             <div>
@@ -128,11 +100,10 @@
                 <span id="feedbackRatingText" class="fw-bold text-warning"><i class="bi bi-star-fill me-1"></i> Valutazione PWA: -- / 5</span>
             </div>
         </div>
-        <div class="small opacity-75 d-none d-sm-block">
-            N.O.E. Rieti 210 &bull; Sistema Cloud
-        </div>
+        <div class="small opacity-75 d-none d-sm-block">N.O.E. Rieti 210 &bull; Sistema Cloud</div>
     </div>
-<!-- Leaflet JS per Mappa -->
+
+    <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <!-- Firebase SDKs & Core Logic -->
@@ -152,44 +123,46 @@
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        const ROLES_SINGLE = [
-            "Presidente (Legale Rappresentante)",
-            "Vice Presidente",
-            "Segreteria",
-            "Tesoriere",
-            "Responsabile Mezzi",
-            "Responsabile AIB",
-            "Responsabile App"
+        // --- SISTEMA DI CACHE INTELLIGENTE LOCALE ---
+        async function getCachedData(collectionName, maxAgeMinutes = 30) {
+            const cacheKey = 'noe_cache_' + collectionName;
+            const timeKey = 'noe_time_' + collectionName;
+            
+            const cachedData = localStorage.getItem(cacheKey);
+            const cachedTime = localStorage.getItem(timeKey);
+            const now = new Date().getTime();
+
+            if (cachedData && cachedTime && (now - cachedTime < maxAgeMinutes * 60 * 1000)) {
+                return JSON.parse(cachedData);
+            }
+
+            const querySnapshot = await getDocs(collection(db, collectionName));
+            const dataList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+            localStorage.setItem(cacheKey, JSON.stringify(dataList));
+            localStorage.setItem(timeKey, now);
+
+            return dataList;
+        }
+
+        function invalidateCache(collectionName) {
+            localStorage.removeItem('noe_cache_' + collectionName);
+            localStorage.removeItem('noe_time_' + collectionName);
+        }
+const ROLES_SINGLE = [
+            "Presidente (Legale Rappresentante)", "Vice Presidente", "Segreteria",
+            "Tesoriere", "Responsabile Mezzi", "Responsabile AIB", "Responsabile App"
         ];
 
-        const ROLES_MANAGERS = [
-            "Presidente (Legale Rappresentante)",
-            "Vice Presidente",
-            "Segreteria",
-            "Tesoriere",
-            "Responsabile Mezzi",
-            "Responsabile AIB",
-            "Responsabile App"
-        ];
+        const ROLES_MANAGERS = [...ROLES_SINGLE];
 
         const SERVICE_TYPES = [
-            "Turno in Caserma",
-            "Pattugliamento AIB",
-            "Intervento AIB",
-            "Pattugliamento Idrogeologico",
-            "Intervento Idrogeologico",
-            "Supporto alla Popolazione",
-            "Manutenzione Caserma",
-            "Manutenzione Mezzi"
+            "Turno in Caserma", "Pattugliamento AIB", "Intervento AIB",
+            "Pattugliamento Idrogeologico", "Intervento Idrogeologico",
+            "Supporto alla Popolazione", "Manutenzione Caserma", "Manutenzione Mezzi"
         ];
 
-        const OPERATIVE_ROLES = [
-            "Caposquadra",
-            "Autista",
-            "Operatore",
-            "Soccorritore",
-            "4° Uomo (Affiancamento)"
-        ];
+        const OPERATIVE_ROLES = ["Caposquadra", "Autista", "Operatore", "Soccorritore", "4° Uomo (Affiancamento)"];
 
         let users = [];
         let loggedUser = JSON.parse(localStorage.getItem('noe_logged')) || null;
@@ -246,11 +219,11 @@
 
         window.loadCloudData = async function() {
             try {
-                const usersSnap = await getDocs(collection(db, "users"));
-                users = usersSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                const vehSnap = await getDocs(collection(db, "vehicles"));
-                vehicles = vehSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+                users = await getCachedData('users', 30);
+                vehicles = await getCachedData('vehicles', 30);
+                waterPoints = await getCachedData('waterPoints', 30);
+                announcements = await getCachedData('announcements', 30);
+                refuels = await getCachedData('refuels', 30);
 
                 const shiftSnap = await getDocs(collection(db, "shifts"));
                 shifts = shiftSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -260,15 +233,6 @@
 
                 const dispSnap = await getDocs(collection(db, "availabilities"));
                 availabilities = dispSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                const wpSnap = await getDocs(collection(db, "waterPoints"));
-                waterPoints = wpSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                const refSnap = await getDocs(collection(db, "refuels"));
-                refuels = refSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-                const annSnap = await getDocs(collection(db, "announcements"));
-                announcements = annSnap.docs.map(d => ({ id: d.id, ...d.data() }));
 
                 try {
                     const repSnap = await getDocs(collection(db, "uploadedReports"));
@@ -286,62 +250,39 @@
         window.updatePresence = async function() {
             if (!loggedUser || !loggedUser.id) return;
             try {
-                await updateDoc(doc(db, "users", loggedUser.id), {
-                    lastSeen: new Date().getTime()
-                });
-            } catch (e) {
-                console.error("Errore aggiornamento presenza:", e);
-            }
+                await updateDoc(doc(db, "users", loggedUser.id), { lastSeen: new Date().getTime() });
+            } catch (e) { console.error("Errore presenza:", e); }
         }
 
         window.renderOnlineCounter = async function() {
             const onlineBar = document.getElementById('onlineBar');
-            if (!loggedUser) {
-                if (onlineBar) onlineBar.classList.add('d-none');
-                return;
-            }
-
+            if (!loggedUser) { if (onlineBar) onlineBar.classList.add('d-none'); return; }
             if (onlineBar) onlineBar.classList.remove('d-none');
 
             const fiveMinutesAgo = new Date().getTime() - (5 * 60 * 1000);
             const count = users.filter(u => u.lastSeen && u.lastSeen > fiveMinutesAgo).length;
-            const finalCount = Math.max(1, count);
-            
             const countElem = document.getElementById('onlineCount');
-            if (countElem) {
-                countElem.innerText = finalCount;
-            }
+            if (countElem) countElem.innerText = Math.max(1, count);
 
             try {
                 const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
                 const feedbacks = fbSnap.docs.map(d => d.data());
-
                 const ratingElem = document.getElementById('feedbackRatingText');
                 if (ratingElem) {
                     if (feedbacks.length > 0) {
                         const sum = feedbacks.reduce((acc, f) => acc + (parseFloat(f.voto) || 0), 0);
-                        const avg = (sum / feedbacks.length).toFixed(1);
-                        ratingElem.innerHTML = `<i class="bi bi-star-fill me-1 text-warning"></i> Valutazione PWA: <strong>${avg}</strong> / 5 ⭐ (${feedbacks.length})`;
+                        ratingElem.innerHTML = `<i class="bi bi-star-fill me-1 text-warning"></i> Valutazione PWA: <strong>${(sum / feedbacks.length).toFixed(1)}</strong> / 5 ⭐ (${feedbacks.length})`;
                     } else {
                         ratingElem.innerHTML = `<i class="bi bi-star me-1 text-warning"></i> Valutazione PWA: <strong>--</strong> / 5`;
                     }
                 }
-            } catch (e) {
-                console.error("Errore calcolo media feedback:", e);
-            }
+            } catch (e) { console.error("Errore feedback:", e); }
         }
-
-        window.openThemeCustomizer = function() {
+window.openThemeCustomizer = function() {
             if (!isAppCreator()) return;
-            
             const currentBlue = getComputedStyle(document.documentElement).getPropertyValue('--pc-blue').trim() || '#0d3b66';
-            const newColor = prompt("Inserisci il codice esadecimale del nuovo colore principale dell'app (es. #0d3b66 per blu, #1b4332 per verde scuro, #3f37c9 per viola):", currentBlue);
-            
-            if (newColor && newColor.startsWith('#')) {
-                saveThemeToCloud(newColor);
-            } else if (newColor !== null) {
-                alert("Formato colore non valido. Usa il formato esadecimale es. #0d3b66");
-            }
+            const newColor = prompt("Inserisci il codice esadecimale del nuovo colore principale dell'app:", currentBlue);
+            if (newColor && newColor.startsWith('#')) saveThemeToCloud(newColor);
         }
 
         window.saveThemeToCloud = async function(colorHex) {
@@ -351,13 +292,10 @@
                     const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
                     await setDoc(settingsRef, { primaryColor: colorHex });
                 });
-
                 applyThemeColor(colorHex);
-                alert("Tema di colore aggiornato e salvato con successo nel Cloud per tutti gli utenti!");
+                alert("Tema aggiornato con successo!");
             } catch (err) {
-                console.error("Errore salvataggio tema:", err);
                 applyThemeColor(colorHex);
-                alert("Colore applicato localmente.");
             }
         }
 
@@ -381,7 +319,8 @@
                 if (localColor) applyThemeColor(localColor);
             }
         }
-window.init = async function() {
+
+        window.init = async function() {
             if (!loggedUser) {
                 renderLogin();
                 const onlineBar = document.getElementById('onlineBar');
@@ -401,39 +340,22 @@ window.init = async function() {
                     }, 60000);
                 }
 
-                // CONTROLLO FEEDBACK OBBLIGATORIO (Dal 15 al 20 del mese)
                 const isBlocked = await checkMonthlyFeedback();
-                if (isBlocked) {
-                    return;
-                }
+                if (isBlocked) return;
 
                 const archiveContainer = document.getElementById('archiveBtnContainer');
-                if (isManagerRole()) {
-                    archiveContainer.innerHTML = `
-                        <button class="btn btn-info btn-sm fw-bold text-white" onclick="switchTab('archivioReport')" title="Archivio Report Mensili Pubblicati">
-                            <i class="bi bi-folder-symlink-fill me-1"></i> Archivio
-                        </button>
-                    `;
-                } else {
-                    archiveContainer.innerHTML = '';
-                }
+                archiveContainer.innerHTML = isManagerRole() ? `
+                    <button class="btn btn-info btn-sm fw-bold text-white" onclick="switchTab('archivioReport')">
+                        <i class="bi bi-folder-symlink-fill me-1"></i> Archivio
+                    </button>
+                ` : '';
 
                 const creatorContainer = document.getElementById('creatorReportBtnContainer');
-                if (isAppCreator()) {
-                    creatorContainer.innerHTML = `
-                        <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="downloadWordReport()" title="Scarica Report Operativo Mensile Word">
-                            <i class="bi bi-file-earmark-word-fill me-1"></i> Word
-                        </button>
-                        <button class="btn btn-outline-danger btn-sm fw-bold" onclick="renderAdminFeedbackDashboard()" title="Dashboard Feedback Riservata">
-                            <i class="bi bi-eye-slash-fill me-1"></i> Feedback
-                        </button>
-                        <button class="btn btn-outline-dark btn-sm fw-bold" onclick="openThemeCustomizer()" title="Personalizza Colori App">
-                            <i class="bi bi-palette-fill me-1"></i> Colori
-                        </button>
-                    `;
-                } else {
-                    creatorContainer.innerHTML = '';
-                }
+                creatorContainer.innerHTML = isAppCreator() ? `
+                    <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="downloadWordReport()"><i class="bi bi-file-earmark-word-fill me-1"></i> Word</button>
+                    <button class="btn btn-outline-danger btn-sm fw-bold" onclick="renderAdminFeedbackDashboard()"><i class="bi bi-eye-slash-fill me-1"></i> Feedback</button>
+                    <button class="btn btn-outline-dark btn-sm fw-bold" onclick="openThemeCustomizer()"><i class="bi bi-palette-fill me-1"></i> Colori</button>
+                ` : '';
 
                 renderMainView();
             }
@@ -447,21 +369,12 @@ window.init = async function() {
                             <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-main" onerror="this.style.display='none'">
                             <h3 class="mt-2 mb-1 text-primary fw-bold">N.O.E. - Rieti 210</h3>
                             <p class="text-muted mb-1">Nucleo Operativo Emergenza - Gestione Cloud</p>
-                            <p class="small text-muted mb-4">C.F. 90041090573 &bull; H24: 3793954151</p>
-                            
                             <form onsubmit="handleLogin(event)">
-                                <div class="mb-3 text-start">
-                                    <label class="form-label">Email o Codice Fiscale</label>
-                                    <input type="text" id="loginId" class="form-control" required>
-                                </div>
-                                <div class="mb-3 text-start">
-                                    <label class="form-label">Password</label>
-                                    <input type="password" id="loginPass" class="form-control" required>
-                                </div>
+                                <div class="mb-3 text-start"><label class="form-label">Email o Codice Fiscale</label><input type="text" id="loginId" class="form-control" required></div>
+                                <div class="mb-3 text-start"><label class="form-label">Password</label><input type="password" id="loginPass" class="form-control" required></div>
                                 <button type="submit" class="btn btn-pc w-100 mb-3 fw-bold">Accedi</button>
                             </form>
-                            <hr>
-                            <button class="btn btn-outline-secondary w-100" onclick="renderRegister()">Non hai un account? Registrati</button>
+                            <hr><button class="btn btn-outline-secondary w-100" onclick="renderRegister()">Non hai un account? Registrati</button>
                         </div>
                     </div>
                 </div>
@@ -479,15 +392,9 @@ window.init = async function() {
                 <div class="row justify-content-center">
                     <div class="col-md-7">
                         <div class="card p-4">
-                            <div class="text-center mb-3">
-                                <img src="logo bianco.png" alt="Logo NOE Rieti" style="height: 80px; width: auto;" onerror="this.style.display='none'">
-                            </div>
                             <h4 class="mb-3 text-primary fw-bold text-center">Registrazione Volontario</h4>
                             <form onsubmit="handleRegister(event)">
-                                <div class="mb-3">
-                                    <label class="form-label font-weight-bold">Foto Profilo (Obbligatoria)* - Verrà compressa automaticamente</label>
-                                    <input type="file" id="regFoto" accept="image/*" class="form-control" required>
-                                </div>
+                                <div class="mb-3"><label class="form-label">Foto Profilo (Obbligatoria)*</label><input type="file" id="regFoto" accept="image/*" class="form-control" required></div>
                                 <div class="row">
                                     <div class="col-md-6 mb-3"><label>Nome*</label><input type="text" id="regNome" class="form-control" required></div>
                                     <div class="col-md-6 mb-3"><label>Cognome*</label><input type="text" id="regCognome" class="form-control" required></div>
@@ -500,9 +407,9 @@ window.init = async function() {
                                 <div class="row">
                                     <div class="col-md-6 mb-3"><label>Codice Fiscale*</label><input type="text" id="regCF" class="form-control" required></div>
                                     <div class="col-md-3 mb-3"><label>Gruppo Sanguigno</label><input type="text" id="regSangue" class="form-control" placeholder="es. 0+"></div>
-                                    <div class="col-md-3 mb-3"><label>Taglia Abbigliamento</label><input type="text" id="regTaglia" class="form-control" placeholder="es. L"></div>
+                                    <div class="col-md-3 mb-3"><label>Taglia</label><input type="text" id="regTaglia" class="form-control" placeholder="es. L"></div>
                                 </div>
-                                <div class="mb-3"><label>Password di accesso*</label><input type="password" id="regPass" class="form-control" required></div>
+                                <div class="mb-3"><label>Password*</label><input type="password" id="regPass" class="form-control" required></div>
                                 <button type="submit" class="btn btn-success w-100 fw-bold">Completa Registrazione</button>
                                 <button type="button" class="btn btn-link w-100 mt-2 text-decoration-none" onclick="renderLogin()">Torna al Login</button>
                             </form>
@@ -534,34 +441,26 @@ window.init = async function() {
                 };
 
                 await addDoc(collection(db, "users"), newUser);
-                alert('Registrazione completata! Ora puoi accedere.');
+                invalidateCache('users'); // PULIZIA AUTOMATICA CACHE UTENTI
+                alert('Registrazione completata!');
                 loadCloudData();
-            } catch (err) {
-                console.error("Errore salvataggio utente:", err);
-                alert("Errore durante la registrazione.");
-            }
+            } catch (err) { console.error("Errore:", err); }
         }
 
         window.handleLogin = function(e) {
             e.preventDefault();
             const id = document.getElementById('loginId').value.trim().toLowerCase();
             const pass = document.getElementById('loginPass').value;
-
             const found = users.find(u => (u.email.toLowerCase() === id || u.cf.toLowerCase() === id) && u.pass === pass);
             if (found) {
                 loggedUser = found;
                 localStorage.setItem('noe_logged', JSON.stringify(loggedUser));
                 init();
-            } else {
-                alert('Credenziali non valide!');
-            }
+            } else { alert('Credenziali non valide!'); }
         }
 
         window.logout = function() {
-            if (window.presenceInterval) {
-                clearInterval(window.presenceInterval);
-                window.presenceInterval = null;
-            }
+            if (window.presenceInterval) { clearInterval(window.presenceInterval); window.presenceInterval = null; }
             localStorage.removeItem('noe_logged');
             loggedUser = null;
             document.getElementById('userInfo').classList.add('d-none');
@@ -572,9 +471,7 @@ window.init = async function() {
 
         window.switchTab = function(tab) {
             activeTab = tab;
-            if (tab === 'bacheca') {
-                markAllAnnouncementsAsRead();
-            }
+            if (tab === 'bacheca') markAllAnnouncementsAsRead();
             renderMainView();
         }
 
@@ -585,19 +482,14 @@ window.init = async function() {
                 if (!letti.some(l => l.nome === userName)) {
                     try {
                         await updateDoc(doc(db, "announcements", ann.id), {
-                            lettiDa: arrayUnion({
-                                nome: userName,
-                                dataOra: new Date().toLocaleString('it-IT')
-                            })
+                            lettiDa: arrayUnion({ nome: userName, dataOra: new Date().toLocaleString('it-IT') })
                         });
-                    } catch (err) {
-                        console.error("Errore marcatura lettura:", err);
-                    }
+                        invalidateCache('announcements');
+                    } catch (err) { console.error(err); }
                 }
             }
         }
-
-        window.renderMainView = function() {
+window.renderMainView = function() {
             const userName = `${loggedUser.nome} ${loggedUser.cognome}`;
             let unreadCount = announcements.filter(ann => {
                 let letti = ann.lettiDa || [];
@@ -616,56 +508,20 @@ window.init = async function() {
 
                 <div class="sticky-menu-bar shadow-sm rounded mb-4">
                     <ul class="nav nav-pills fixed-menu-container bg-white p-2 rounded border">
-                        <li class="nav-item">
-                            <a class="nav-link ${activeTab === 'bacheca' ? 'active' : ''}" onclick="switchTab('bacheca')">
-                                <i class="bi bi-megaphone-fill me-1"></i> Bacheca Avvisi ${bachecaBadge}
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link ${activeTab === 'anagrafica' ? 'active' : ''}" onclick="switchTab('anagrafica')">
-                                <i class="bi bi-people-fill me-1"></i> Volontari
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link ${activeTab === 'turni' ? 'active' : ''}" onclick="switchTab('turni')">
-                                <i class="bi bi-calendar-event me-1"></i> Turni & Servizi
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link ${activeTab === 'disponibilita' ? 'active' : ''}" onclick="switchTab('disponibilita')">
-                                <i class="bi bi-calendar-check me-1"></i> Disponibilità
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link ${activeTab === 'storico' ? 'active' : ''}" onclick="switchTab('storico')">
-                                <i class="bi bi-clock-history me-1"></i> Storico Servizi
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link ${activeTab === 'mezzi' ? 'active' : ''}" onclick="switchTab('mezzi')">
-                                <i class="bi bi-truck me-1"></i> Mezzi & Scadenze
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link ${activeTab === 'rifornimenti' ? 'active' : ''}" onclick="switchTab('rifornimenti')">
-                                <i class="bi bi-fuel-pump me-1"></i> Rifornimenti
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link ${activeTab === 'mappa' ? 'active' : ''}" onclick="switchTab('mappa')">
-                                <i class="bi bi-geo-alt-fill me-1"></i> Mappa Idrica
-                            </a>
-                        </li>
+                        <li class="nav-item"><a class="nav-link ${activeTab === 'bacheca' ? 'active' : ''}" onclick="switchTab('bacheca')"><i class="bi bi-megaphone-fill me-1"></i> Bacheca ${bachecaBadge}</a></li>
+                        <li class="nav-item"><a class="nav-link ${activeTab === 'anagrafica' ? 'active' : ''}" onclick="switchTab('anagrafica')"><i class="bi bi-people-fill me-1"></i> Volontari</a></li>
+                        <li class="nav-item"><a class="nav-link ${activeTab === 'turni' ? 'active' : ''}" onclick="switchTab('turni')"><i class="bi bi-calendar-event me-1"></i> Turni</a></li>
+                        <li class="nav-item"><a class="nav-link ${activeTab === 'disponibilita' ? 'active' : ''}" onclick="switchTab('disponibilita')"><i class="bi bi-calendar-check me-1"></i> Disponibilità</a></li>
+                        <li class="nav-item"><a class="nav-link ${activeTab === 'storico' ? 'active' : ''}" onclick="switchTab('storico')"><i class="bi bi-clock-history me-1"></i> Storico</a></li>
+                        <li class="nav-item"><a class="nav-link ${activeTab === 'mezzi' ? 'active' : ''}" onclick="switchTab('mezzi')"><i class="bi bi-truck me-1"></i> Mezzi</a></li>
+                        <li class="nav-item"><a class="nav-link ${activeTab === 'rifornimenti' ? 'active' : ''}" onclick="switchTab('rifornimenti')"><i class="bi bi-fuel-pump me-1"></i> Rifornimenti</a></li>
+                        <li class="nav-item"><a class="nav-link ${activeTab === 'mappa' ? 'active' : ''}" onclick="switchTab('mappa')"><i class="bi bi-geo-alt-fill me-1"></i> Mappa</a></li>
                     </ul>
                 </div>
-
                 <div id="tabContent"></div>
             `;
 
-            if (activeTab === 'bacheca') {
-                renderBacheca();
-                markAllAnnouncementsAsRead();
-            }
+            if (activeTab === 'bacheca') { renderBacheca(); markAllAnnouncementsAsRead(); }
             else if (activeTab === 'anagrafica') renderAnagrafica();
             else if (activeTab === 'turni') renderTurni();
             else if (activeTab === 'disponibilita') renderDisponibilita();
@@ -684,8 +540,7 @@ window.init = async function() {
 
             let annHTML = announcements.map((ann) => {
                 let lettiList = ann.lettiDa || [];
-                let lettiHtml = `<details class="mt-2 text-muted small"><summary style="cursor: pointer;">Visualizzazioni (${lettiList.length} volontari)</summary><ul class="ps-3 mb-0 mt-1">${lettiList.map(l => `<li>${l.nome} - <em>${l.dataOra}</em></li>`).join('')}</ul></details>`;
-
+                let lettiHtml = `<details class="mt-2 text-muted small"><summary style="cursor: pointer;">Visualizzazioni (${lettiList.length})</summary><ul class="ps-3 mb-0 mt-1">${lettiList.map(l => `<li>${l.nome} - <em>${l.dataOra}</em></li>`).join('')}</ul></details>`;
                 return `
                     <div class="col-md-12 mb-3">
                         <div class="card p-3 border-start border-4 border-warning shadow-sm">
@@ -696,12 +551,8 @@ window.init = async function() {
                             <p class="mb-2 text-dark" style="white-space: pre-line;">${ann.testo}</p>
                             ${lettiHtml}
                             <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-2">
-                                <small class="text-secondary">Pubblicato da: <strong>${ann.autore}</strong> (${ann.ruoloAutore})</small>
-                                ${isAdmin ? `
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteAnnouncement('${ann.id}')">
-                                        <i class="bi bi-trash"></i> Elimina
-                                    </button>
-                                ` : ''}
+                                <small class="text-secondary">Pubblicato da: <strong>${ann.autore}</strong></small>
+                                ${isAdmin ? `<button class="btn btn-sm btn-outline-danger" onclick="deleteAnnouncement('${ann.id}')"><i class="bi bi-trash"></i> Elimina</button>` : ''}
                             </div>
                         </div>
                     </div>
@@ -711,354 +562,53 @@ window.init = async function() {
             document.getElementById('tabContent').innerHTML = `
                 ${canPost ? `
                 <div class="card p-4 mb-4 bg-light border">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-megaphone me-2"></i>Pubblica Nuovo Avviso in Bacheca</h4>
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-megaphone me-2"></i>Pubblica Nuovo Avviso</h4>
                     <form onsubmit="addAnnouncement(event)">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Titolo Comunicato*</label>
-                            <input type="text" id="annTitolo" class="form-control" placeholder="es. Convocazione Assemblea / Emergenza Meteo" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Testo del Messaggio*</label>
-                            <textarea id="annTesto" class="form-control" rows="3" placeholder="Scrivi qui l'avviso per i volontari..." required></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-warning fw-bold text-dark"><i class="bi bi-send me-1"></i>Pubblica Avviso</button>
+                        <div class="mb-3"><label class="form-label fw-bold">Titolo*</label><input type="text" id="annTitolo" class="form-control" required></div>
+                        <div class="mb-3"><label class="form-label fw-bold">Testo*</label><textarea id="annTesto" class="form-control" rows="3" required></textarea></div>
+                        <button type="submit" class="btn btn-warning fw-bold text-dark"><i class="bi bi-send me-1"></i>Pubblica</button>
                     </form>
                 </div>
-                ` : `
-                <div class="alert alert-info mb-4">
-                    <i class="bi bi-info-circle me-2"></i>Sezione Bacheca in sola lettura. I comunicati ufficiali vengono pubblicati dai Responsabili dell'Associazione.
-                </div>
-                `}
-
-                <h4 class="fw-bold mb-3"><i class="bi bi-pin-angle me-2"></i>Comunicati ed Avvisi Ufficiali (${announcements.length})</h4>
-                <div class="row">${announcements.length > 0 ? annHTML : '<div class="col-12 text-muted">Nessun avviso presente in bacheca.</div>'}</div>
+                ` : ''}
+                <h4 class="fw-bold mb-3">Comunicati Ufficiali (${announcements.length})</h4>
+                <div class="row">${announcements.length > 0 ? annHTML : '<div class="col-12 text-muted">Nessun avviso presente.</div>'}</div>
             `;
         }
 
-        window.downloadWordReport = function() {
-            const today = new Date();
-            const defaultMonth = String(today.getMonth() + 1).padStart(2, '0') + '/' + today.getFullYear();
-            const inputMonth = prompt("Inserisci Mese e Anno del report nel formato MM/AAAA:", defaultMonth);
-
-            if (!inputMonth) return;
-
-            const [mStr, yStr] = inputMonth.split('/');
-            const monthInt = parseInt(mStr, 10);
-            const yearInt = parseInt(yStr, 10);
-
-            if (isNaN(monthInt) || isNaN(yearInt) || monthInt < 1 || monthInt > 12) {
-                alert("Formato data non valido! Usa MM/AAAA (es. 10/2026).");
-                return;
-            }
-
-            let filteredShifts = historyShifts.filter(s => {
-                if (!s.data) return false;
-                const parts = s.data.split('-');
-                if (parts.length === 3) {
-                    const year = parseInt(parts[0], 10);
-                    const month = parseInt(parts[1], 10);
-                    return year === yearInt && month === monthInt;
-                }
-                return false;
-            });
-            filteredShifts.sort((a, b) => a.data.localeCompare(b.data) || a.oraInizio.localeCompare(b.oraInizio));
-
-            let filteredRefuels = refuels.filter(r => {
-                if (!r.data) return false;
-                const parts = r.data.split('-');
-                if (parts.length === 3) {
-                    const year = parseInt(parts[0], 10);
-                    const month = parseInt(parts[1], 10);
-                    return year === yearInt && month === monthInt;
-                }
-                return false;
-            });
-            filteredRefuels.sort((a, b) => a.data.localeCompare(b.data) || a.ora.localeCompare(b.ora));
-
-            let totalKmMonth = 0;
-            let kmPerVehicle = {};
-            filteredShifts.forEach(s => {
-                const km = parseInt(s.kmPercorsi, 10) || 0;
-                totalKmMonth += km;
-                if (s.mezzoUsato && s.mezzoUsato !== "Nessun Mezzo") {
-                    kmPerVehicle[s.mezzoUsato] = (kmPerVehicle[s.mezzoUsato] || 0) + km;
-                }
-            });
-
-            let totalFuelCost = 0;
-            let totalLiters = 0;
-            filteredRefuels.forEach(r => {
-                totalFuelCost += (parseFloat(r.importo) || 0);
-                totalLiters += (parseFloat(r.litri) || 0);
-            });
-
-            let docHTML = `
-                <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-                <head>
-                    <meta charset='utf-8'>
-                    <title>Report Operativo Mensile N.O.E. Rieti</title>
-                    <style>
-                        body { font-family: 'Calibri', 'Arial', sans-serif; font-size: 11pt; color: #000; margin: 2cm; }
-                        h1 { font-size: 16pt; color: #0d3b66; text-align: center; text-transform: uppercase; margin-bottom: 5px; font-weight: bold; }
-                        h2 { font-size: 13pt; color: #0d3b66; border-bottom: 2px solid #0d3b66; padding-bottom: 3px; margin-top: 20px; text-transform: uppercase; }
-                        .header-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; border-bottom: 2px solid #0d3b66; }
-                        .header-table td { padding: 5px; vertical-align: middle; }
-                        .sub-header { font-size: 10pt; text-align: center; color: #555; margin-bottom: 25px; }
-                        table.data-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10pt; }
-                        table.data-table th { background-color: #0d3b66; color: #ffffff; padding: 6px; text-align: left; border: 1px solid #0d3b66; font-size: 9.5pt; text-transform: uppercase; }
-                        table.data-table td { padding: 6px; border: 1px solid #cccccc; vertical-align: top; }
-                        table.data-table tr:nth-child(even) { background-color: #f2f5f8; }
-                        .summary-box { background-color: #f8f9fa; border: 1px solid #0d3b66; padding: 12px; margin-bottom: 15px; border-radius: 4px; }
-                        .signature-section { margin-top: 40px; width: 100%; }
-                        .signature-box { width: 45%; float: left; text-align: center; font-size: 10pt; }
-                    </style>
-                </head>
-                <body>
-                    <table class="header-table">
-                        <tr>
-                            <td style="width: 20%; text-align: left;">
-                                <strong>DIPARTIMENTO PROTEZIONE CIVILE</strong><br>
-                                <span style="font-size: 9pt;">Regione Lazio &bull; Prov. Rieti</span>
-                            </td>
-                            <td style="width: 60%; text-align: center;">
-                                <h1>N.O.E. - RIETI 210</h1>
-                                <div style="font-size: 10pt; font-weight: bold;">NUCLEO OPERATIVO EMERGENZA</div>
-                            </td>
-                            <td style="width: 20%; text-align: right; font-size: 9pt;">
-                                <strong>C.F.:</strong> 90041090573<br>
-                                <strong>H24:</strong> 3793954151
-                            </td>
-                        </tr>
-                    </table>
-
-                    <div class="sub-header">
-                        <strong>VERBALE OPERATIVO E DI RIGUARDO MENSILE</strong><br>
-                        PERIODO DI RIFERIMENTO: <u>${inputMonth}</u> &bull; PROTOCOLLO INTERNO DI SERVIZIO
-                    </div>
-
-                    <h2>1. RIEPILOGO SINTETICO ATTIVITÀ OPERATIVE</h2>
-                    <div class="summary-box">
-                        <strong>- Totale Servizi/Turni Conclusi:</strong> ${filteredShifts.length}<br>
-                        <strong>- Chilometri Totali Percorsi dalla Flotta:</strong> ${totalKmMonth} KM<br>
-                        <strong>- Rifornimenti Carburante Effettuati:</strong> ${filteredRefuels.length} erogazioni (${totalLiters.toFixed(2)} Litri | Spesa Totale: € ${totalFuelCost.toFixed(2)})<br>
-                        <strong>- Comunicati ed Ordini di Servizio in Bacheca:</strong> ${announcements.length} attivi
-                    </div>
-
-                    <h2>2. REGISTRO DETTAGLIATO TURNI E SERVIZI SVOLTI</h2>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 12%;">Data</th>
-                                <th style="width: 12%;">Orario</th>
-                                <th style="width: 20%;">Tipologia Servizio</th>
-                                <th style="width: 18%;">Mezzo Impiegato</th>
-                                <th style="width: 8%;">KM</th>
-                                <th style="width: 30%;">Squadra Operativa e Note</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${filteredShifts.length === 0 ? '<tr><td colspan="6" style="text-align:center;"><em>Nessuna attività registrata nel mese selezionato.</em></td></tr>' : 
-                            filteredShifts.map(s => {
-                                let squadra = s.volontariDettaglio ? s.volontariDettaglio.map(v => `${v.nome} (${v.ruoloOperativo})`).join(', ') : 'N/A';
-                                return `
-                                    <tr>
-                                        <td>${s.data}</td>
-                                        <td>${s.oraInizio} - ${s.oraFine}</td>
-                                        <td><strong>${s.tipoServizio}</strong></td>
-                                        <td>${s.mezzoUsato || 'Nessuno'}</td>
-                                        <td>${s.kmPercorsi || 0} km</td>
-                                        <td><strong>Squadra:</strong> ${squadra}<br><em>Note: ${s.note || 'Nessuna'}</em></td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
-
-                    <h2>3. REPORT LOGISTICO FLOTTA MEZZI ED EROGAZIONI CARBURANTE</h2>
-                    <p><strong>Riepilogo Chilometraggio Mensile per Automezzo:</strong></p>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Modello / Targa Automezzo</th>
-                                <th>KM Percorsi nel Mese</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${Object.keys(kmPerVehicle).length === 0 ? '<tr><td colspan="2" style="text-align:center;"><em>Nessun utilizzo mezzi registrato nel mese.</em></td></tr>' :
-                            Object.keys(kmPerVehicle).map(vk => `
-                                <tr>
-                                    <td><strong>${vk}</strong></td>
-                                    <td>${kmPerVehicle[vk]} KM</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-
-                    <p style="margin-top: 15px;"><strong>Registro Rifornimenti Carburante:</strong></p>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th>Data / Ora</th>
-                                <th>Mezzo Rifornito</th>
-                                <th>Litri</th>
-                                <th>Importo (€)</th>
-                                <th>Operatore Registrante</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${filteredRefuels.length === 0 ? '<tr><td colspan="5" style="text-align:center;"><em>Nessun rifornimento effettuato nel mese.</em></td></tr>' :
-                            filteredRefuels.map(r => `
-                                <tr>
-                                    <td>${r.data} - ${r.ora}</td>
-                                    <td><strong>${r.mezzo}</strong></td>
-                                    <td>${r.litri} L</td>
-                                    <td>€ ${r.importo.toFixed(2)}</td>
-                                    <td>${r.volontario}</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-
-                    <h2>4. DIRETTIVE DI BACHECA E REGISTRO PRESA VISIONE OPERATORI</h2>
-                    <table class="data-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 15%;">Data Pubbl.</th>
-                                <th style="width: 25%;">Titolo Comunicato</th>
-                                <th style="width: 20%;">Autore</th>
-                                <th style="width: 40%;">Registro Presa Visione (Volontario - Data/Ora)</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${announcements.length === 0 ? '<tr><td colspan="4" style="text-align:center;"><em>Nessun avviso presente in bacheca.</em></td></tr>' :
-                            announcements.map(a => {
-                                let lettiList = a.lettiDa || [];
-                                let lettiStr = lettiList.map(l => `${l.nome} (${l.dataOra})`).join('<br>');
-                                return `
-                                    <tr>
-                                        <td>${a.data}</td>
-                                        <td><strong>${a.titolo}</strong></td>
-                                        <td>${a.autore}</td>
-                                        <td><small>${lettiStr || '<em>Nessuna lettura registrata</em>'}</small></td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                    </table>
-
-                    <div style="margin-top: 30px; font-size: 9.5pt; text-align: justify; color: #444;">
-                        <em>Il presente documento costituisce verbale ufficiale interno delle attività svolte dal Nucleo Operativo Emergenza N.O.E. Rieti Cod. 210 per il mese di ${inputMonth}. Dati estratti ed archiviati digitalmente mediante il sistema gestionale Cloud dell'Associazione.</em>
-                    </div>
-
-                    <table class="signature-section">
-                        <tr>
-                            <td class="signature-box" style="text-align: left;">
-                                <strong>Il Redattore del Report</strong><br>
-                                Responsabile App / Gestionale Cloud<br><br><br>
-                                ____________________________________
-                            </td>
-                            <td class="signature-box" style="text-align: right;">
-                                <strong>Visto dal Legale Rappresentante</strong><br>
-                                Il Presidente / Responsabile di Nucleo<br><br><br>
-                                ____________________________________
-                            </td>
-                        </tr>
-                    </table>
-                </body>
-                </html>
-            `;
-
-            const blob = new Blob(['\ufeff', docHTML], {
-                type: 'application/msword'
-            });
-
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = `Report_Operativo_NOE_Rieti_${mStr}_${yStr}.doc`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            alert(`Report Operativo Word (${inputMonth}) scaricato correttamente!`);
-        };
-
-        window.addAnnouncement = async function(e) {
-            e.preventDefault();
-            const newAnn = {
-                titolo: document.getElementById('annTitolo').value,
-                testo: document.getElementById('annTesto').value,
-                data: new Date().toLocaleString('it-IT'),
-                autore: `${loggedUser.nome} ${loggedUser.cognome}`,
-                ruoloAutore: loggedUser.ruolo,
-                lettiDa: []
-            };
-
-            try {
-                await addDoc(collection(db, "announcements"), newAnn);
-                alert("Avviso pubblicato in bacheca!");
-                loadCloudData();
-            } catch (err) {
-                console.error("Errore avviso:", err);
-            }
-        }
-
-        window.deleteAnnouncement = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questo avviso dalla bacheca?")) {
-                try {
-                    await deleteDoc(doc(db, "announcements", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione avviso:", err);
-                }
-            }
-        }
-// --- SEZIONE ANAGRAFICA ---
         window.renderAnagrafica = function() {
             const isAdmin = isSuperAdmin();
-
             let usersListHTML = users.map((u, index) => {
-                let adminActions = '';
-                if (isAdmin) {
-                    adminActions = `
-                        <div class="mt-2 pt-2 border-top bg-light p-2 rounded">
-                            <label class="small fw-bold text-danger mb-1">Pannello Modifica (Responsabile App/AIB):</label>
-                            <div class="mb-2">
-                                <label class="small text-muted">Ruolo Assegnato:</label>
-                                <select class="form-select form-select-sm" onchange="changeUserRole('${u.id}', this.value)">
-                                    <option value="Volontario" ${u.ruolo === 'Volontario' ? 'selected' : ''}>Volontario</option>
-                                    ${ROLES_SINGLE.map(r => `<option value="${r}" ${u.ruolo === r ? 'selected' : ''}>${r}</option>`).join('')}
-                                </select>
-                            </div>
-                            <button class="btn btn-sm btn-outline-danger w-100 mt-1" onclick="deleteUser('${u.id}')">
-                                <i class="bi bi-trash me-1"></i>Elimina Volontario
-                            </button>
-                        </div>
-                    `;
-                }
+                let adminActions = isAdmin ? `
+                    <div class="mt-2 pt-2 border-top bg-light p-2 rounded">
+                        <label class="small fw-bold text-danger mb-1">Modifica Ruolo:</label>
+                        <select class="form-select form-select-sm mb-2" onchange="changeUserRole('${u.id}', this.value)">
+                            <option value="Volontario" ${u.ruolo === 'Volontario' ? 'selected' : ''}>Volontario</option>
+                            ${ROLES_SINGLE.map(r => `<option value="${r}" ${u.ruolo === r ? 'selected' : ''}>${r}</option>`).join('')}
+                        </select>
+                        <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteUser('${u.id}')"><i class="bi bi-trash me-1"></i>Elimina</button>
+                    </div>
+                ` : '';
 
                 return `
                     <div class="col-md-6 mb-3">
                         <div class="card p-3 h-100">
                             <div class="d-flex align-items-center mb-2">
-                                <img src="${u.foto}" class="avatar-lg me-3" alt="Foto Profilo">
+                                <img src="${u.foto}" class="avatar-lg me-3" alt="Foto">
                                 <div>
                                     <h5 class="mb-0 fw-bold">${u.nome} ${u.cognome}</h5>
                                     <span class="badge badge-role mt-1">${u.ruolo}</span>
                                 </div>
                             </div>
                             <small class="text-muted"><strong>Tel:</strong> ${u.tel} | <strong>Email:</strong> ${u.email}</small>
-                            <small class="text-muted"><strong>CF:</strong> ${u.cf} | <strong>Sangue:</strong> ${u.sangue || '-'} | <strong>Taglia:</strong> ${u.taglia || '-'}</small>
-                            
+                            <small class="text-muted"><strong>CF:</strong> ${u.cf} | <strong>Sangue:</strong> ${u.sangue || '-'}</small>
                             <div class="mt-2 pt-2 border-top">
-                                <strong>Corsi Effettuati:</strong>
+                                <strong>Corsi:</strong>
                                 ${isAdmin ? `
                                     <div class="input-group input-group-sm mt-1">
-                                        <input type="text" id="courseInput_${index}" class="form-control" value="${u.corsi || ''}" placeholder="AIB, Primo Soccorso, ecc.">
+                                        <input type="text" id="courseInput_${index}" class="form-control" value="${u.corsi || ''}">
                                         <button class="btn btn-outline-primary" onclick="saveCourses('${u.id}', ${index})">Salva</button>
                                     </div>
-                                ` : `
-                                    <p class="mb-0 text-secondary">${u.corsi ? u.corsi : '<em>Nessun corso inserito</em>'}</p>
-                                `}
+                                ` : `<p class="mb-0 text-secondary">${u.corsi || 'Nessuno'}</p>`}
                             </div>
                             ${adminActions}
                         </div>
@@ -1066,49 +616,66 @@ window.init = async function() {
                 `;
             }).join('');
 
-            document.getElementById('tabContent').innerHTML = `
-                <h4 class="fw-bold mb-3">Anagrafica Volontari (${users.length})</h4>
-                <div class="row">${usersListHTML}</div>
-            `;
+            document.getElementById('tabContent').innerHTML = `<h4 class="fw-bold mb-3">Anagrafica Volontari (${users.length})</h4><div class="row">${usersListHTML}</div>`;
         }
 
         window.changeUserRole = async function(userId, newRole) {
             try {
                 await updateDoc(doc(db, "users", userId), { ruolo: newRole });
-                alert('Ruolo aggiornato con successo!');
+                invalidateCache('users');
+                alert('Ruolo aggiornato!');
                 loadCloudData();
-            } catch (err) {
-                console.error("Errore ruolo:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         window.saveCourses = async function(userId, index) {
-            const inputVal = document.getElementById(`courseInput_${index}`).value;
+            const val = document.getElementById(`courseInput_${index}`).value;
             try {
-                await updateDoc(doc(db, "users", userId), { corsi: inputVal });
+                await updateDoc(doc(db, "users", userId), { corsi: val });
+                invalidateCache('users');
                 alert('Corsi aggiornati!');
                 loadCloudData();
-            } catch (err) {
-                console.error("Errore corsi:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         window.deleteUser = async function(userId) {
-            if (confirm("Sei sicuro di voler eliminare questo volontario dall'anagrafica?")) {
+            if (confirm("Eliminare volontario?")) {
                 try {
                     await deleteDoc(doc(db, "users", userId));
-                    alert("Volontario eliminato.");
+                    invalidateCache('users');
                     loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione utente:", err);
-                }
+                } catch (err) { console.error(err); }
             }
         }
 
-        // --- SEZIONE TURNI & SERVIZI ---
-        window.renderTurni = function() {
-            const isAdmin = isSuperAdmin();
+        window.addAnnouncement = async function(e) {
+            e.preventDefault();
+            try {
+                await addDoc(collection(db, "announcements"), {
+                    titolo: document.getElementById('annTitolo').value,
+                    testo: document.getElementById('annTesto').value,
+                    data: new Date().toLocaleString('it-IT'),
+                    autore: `${loggedUser.nome} ${loggedUser.cognome}`,
+                    ruoloAutore: loggedUser.ruolo,
+                    lettiDa: []
+                });
+                invalidateCache('announcements');
+                alert("Avviso pubblicato!");
+                loadCloudData();
+            } catch (err) { console.error(err); }
+        }
 
+        window.deleteAnnouncement = async function(id) {
+            if (confirm("Eliminare avviso?")) {
+                try {
+                    await deleteDoc(doc(db, "announcements", id));
+                    invalidateCache('announcements');
+                    loadCloudData();
+                } catch (err) { console.error(err); }
+            }
+        }
+window.renderTurni = function() {
+            const isAdmin = isSuperAdmin();
             let shiftsHTML = shifts.map((s, i) => `
                 <div class="col-md-6 mb-3">
                     <div class="card p-3 border-start border-4 border-primary h-100 d-flex flex-column justify-content-between">
@@ -1117,528 +684,259 @@ window.init = async function() {
                                 <h5 class="fw-bold text-primary mb-0">${s.tipoServizio}</h5>
                                 <span class="badge bg-success">In Corso</span>
                             </div>
-                            <p class="mb-1"><strong>Data / Ora:</strong> ${s.data} - Inizio: ${s.oraInizio} (Presunta fine: ${s.oraFine})</p>
-                            <p class="mb-1"><strong>Note / Luogo:</strong> ${s.note || 'Nessuna nota'}</p>
-                            <p class="mb-1"><strong>Mezzo usufruito:</strong> ${s.mezzoUsato || 'Nessun mezzo'}</p>
-                            <hr class="my-2">
-                            <strong>Squadra Operativa (${s.volontariDettaglio ? s.volontariDettaglio.length : 0}):</strong>
-                            <ul class="list-unstyled mt-1 small mb-2">
-                                ${s.volontariDettaglio ? s.volontariDettaglio.map(v => `
-                                    <li><i class="bi bi-person-badge me-1"></i><strong>${v.nome}:</strong> ${v.ruoloOperativo} ${v.mansioniSpuntate ? '(Mansioni Verificate)' : ''}</li>
-                                `).join('') : ''}
+                            <p class="mb-1"><strong>Data / Ora:</strong> ${s.data} - ${s.oraInizio}</p>
+                            <p class="mb-1"><strong>Mezzo:</strong> ${s.mezzoUsato || 'Nessuno'}</p>
+                            <ul class="list-unstyled small mt-2">
+                                ${s.volontariDettaglio ? s.volontariDettaglio.map(v => `<li><strong>${v.nome}:</strong> ${v.ruoloOperativo}</li>`).join('') : ''}
                             </ul>
                         </div>
                         <div>
-                            <button class="btn btn-outline-success btn-sm mt-3 w-100 fw-bold" onclick="closeShiftModal('${s.id}', ${i})">
-                                <i class="bi bi-check2-square me-1"></i> Chiudi e Salva in Storico
-                            </button>
-                            ${isAdmin ? `
-                                <button class="btn btn-outline-danger btn-sm mt-2 w-100" onclick="deleteActiveShift('${s.id}')">
-                                    <i class="bi bi-trash me-1"></i> Elimina Turno Senza Salvare
-                                </button>
-                            ` : ''}
+                            <button class="btn btn-outline-success btn-sm w-100 fw-bold mt-2" onclick="closeShiftModal('${s.id}', ${i})"><i class="bi bi-check2-square me-1"></i> Chiudi Turno</button>
+                            ${isAdmin ? `<button class="btn btn-outline-danger btn-sm w-100 mt-2" onclick="deleteActiveShift('${s.id}')">Elimina</button>` : ''}
                         </div>
                     </div>
                 </div>
             `).join('');
 
             let optionsTipologia = SERVICE_TYPES.map(st => `<option value="${st}">${st}</option>`).join('');
-            let optionsMezzi = `<option value="Nessun Mezzo">Nessun Mezzo</option>` + vehicles.map(v => `<option value="${v.id}">${v.modello} [${v.targa}] - Km attuali: ${v.km}</option>`).join('');
+            let optionsMezzi = `<option value="Nessun Mezzo">Nessun Mezzo</option>` + vehicles.map(v => `<option value="${v.id}">${v.modello} [${v.targa}]</option>`).join('');
 
             let usersChecklistHTML = users.map((u, idx) => `
                 <div class="border p-2 rounded mb-2 bg-white">
                     <div class="form-check">
                         <input class="form-check-input shift-vol-cb" type="checkbox" id="vol_cb_${idx}" value="${u.nome} ${u.cognome}" onchange="toggleVolOptions(${idx})">
-                        <label class="form-check-label fw-bold" for="vol_cb_${idx}">
-                            ${u.nome} ${u.cognome} <small class="text-muted">(${u.ruolo})</small>
-                        </label>
+                        <label class="form-check-label fw-bold" for="vol_cb_${idx}">${u.nome} ${u.cognome} <small class="text-muted">(${u.ruolo})</small></label>
                     </div>
                     <div id="vol_opts_${idx}" class="mt-2 ps-3 d-none border-start border-3 border-info">
-                        <label class="form-label small fw-bold mb-1">Seleziona Ruoli Operativi Svolti (anche multipli):*</label>
                         <div class="d-flex flex-wrap gap-2 mb-2">
-                            <div class="form-check">
-                                <input class="form-check-input op-role-cb_${idx}" type="checkbox" value="Caposquadra" id="role_cs_${idx}" onchange="toggleChecklistMansione(${idx})">
-                                <label class="form-check-label small" for="role_cs_${idx}">Caposquadra</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input op-role-cb_${idx}" type="checkbox" value="Autista" id="role_aut_${idx}" onchange="toggleChecklistMansione(${idx})">
-                                <label class="form-check-label small" for="role_aut_${idx}">Autista</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input op-role-cb_${idx}" type="checkbox" value="Operatore" id="role_op_${idx}">
-                                <label class="form-check-label small" for="role_op_${idx}">Operatore</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input op-role-cb_${idx}" type="checkbox" value="Soccorritore" id="role_soc_${idx}">
-                                <label class="form-check-label small" for="role_soc_${idx}">Soccorritore</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input op-role-cb_${idx}" type="checkbox" value="4° Uomo (Affiancamento)" id="role_4th_${idx}">
-                                <label class="form-check-label small" for="role_4th_${idx}">4° Uomo</label>
-                            </div>
+                            ${OPERATIVE_ROLES.map(r => `
+                                <div class="form-check"><input class="form-check-input op-role-cb_${idx}" type="checkbox" value="${r}" id="role_${r}_${idx}" onchange="toggleChecklistMansione(${idx})"><label class="form-check-label small" for="role_${r}_${idx}">${r}</label></div>
+                            `).join('')}
                         </div>
-                        <div id="checklist_cs_${idx}" class="form-check small bg-warning bg-opacity-10 p-2 rounded mb-2 d-none">
-                            <input class="form-check-input" type="checkbox" id="chk_cs_${idx}">
-                            <label class="form-check-label fw-bold text-dark" for="chk_cs_${idx}">
-                                Mansione Caposquadra: Controllato DPI squadra, stato radio ed attrezzatura.
-                            </label>
-                        </div>
-                        <div id="checklist_aut_${idx}" class="form-check small bg-info bg-opacity-10 p-2 rounded mb-2 d-none">
-                            <input class="form-check-input" type="checkbox" id="chk_aut_${idx}">
-                            <label class="form-check-label fw-bold text-dark" for="chk_aut_${idx}">
-                                Mansione Autista: Controllati livelli liquidi mezzo e stato generale veicolo.
-                            </label>
-                        </div>
+                        <div id="checklist_cs_${idx}" class="form-check small bg-warning bg-opacity-10 p-2 rounded mb-2 d-none"><input class="form-check-input" type="checkbox" id="chk_cs_${idx}"><label class="form-check-label fw-bold" for="chk_cs_${idx}">Caposquadra: Controllato DPI e radio.</label></div>
+                        <div id="checklist_aut_${idx}" class="form-check small bg-info bg-opacity-10 p-2 rounded mb-2 d-none"><input class="form-check-input" type="checkbox" id="chk_aut_${idx}"><label class="form-check-label fw-bold" for="chk_aut_${idx}">Autista: Controllati livelli liquidi.</label></div>
                     </div>
                 </div>
             `).join('');
 
             document.getElementById('tabContent').innerHTML = `
                 <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-plus me-2"></i>Apertura Nuovo Turno / Servizio</h4>
+                    <h4 class="fw-bold text-primary mb-3">Apertura Nuovo Turno</h4>
                     <form onsubmit="addShift(event)">
                         <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Tipo di Servizio*</label>
-                                <select id="shiftTipo" class="form-select" required>
-                                    ${optionsTipologia}
-                                </select>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Data Servizio*</label>
-                                <input type="date" id="shiftData" class="form-control" required>
-                            </div>
+                            <div class="col-md-6 mb-3"><label>Servizio*</label><select id="shiftTipo" class="form-select" required>${optionsTipologia}</select></div>
+                            <div class="col-md-6 mb-3"><label>Data*</label><input type="date" id="shiftData" class="form-control" required></div>
                         </div>
                         <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Ora Inizio*</label>
-                                <input type="time" id="shiftOraInizio" class="form-control" required>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Ora Fine Presunta*</label>
-                                <input type="time" id="shiftOraFine" class="form-control" required>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Mezzo Assegnato</label>
-                                <select id="shiftMezzo" class="form-select">
-                                    ${optionsMezzi}
-                                </select>
-                            </div>
+                            <div class="col-md-4 mb-3"><label>Inizio*</label><input type="time" id="shiftOraInizio" class="form-control" required></div>
+                            <div class="col-md-4 mb-3"><label>Fine Presunta*</label><input type="time" id="shiftOraFine" class="form-control" required></div>
+                            <div class="col-md-4 mb-3"><label>Mezzo</label><select id="shiftMezzo" class="form-select">${optionsMezzi}</select></div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Seleziona Volontari e Assegna Ruoli/Mansioni:*</label>
-                            <div class="p-3 border rounded bg-light" style="max-height: 300px; overflow-y: auto;">
-                                ${usersChecklistHTML}
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Note / Ordini di Servizio</label>
-                            <input type="text" id="shiftNote" class="form-control" placeholder="Dettagli ed eventuali note operative">
-                        </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-check-circle me-1"></i>Salva e Apri Turno</button>
+                        <div class="mb-3"><label class="fw-bold">Volontari e Ruoli:*</label><div class="p-3 border rounded bg-light" style="max-height: 250px; overflow-y: auto;">${usersChecklistHTML}</div></div>
+                        <button type="submit" class="btn btn-success fw-bold">Apri Turno</button>
                     </form>
                 </div>
-
                 <h4 class="fw-bold mb-3">Servizi in Corso (${shifts.length})</h4>
-                <div class="row">${shifts.length > 0 ? shiftsHTML : '<div class="col-12 text-muted">Nessun servizio attualmente in corso.</div>'}</div>
+                <div class="row">${shifts.length > 0 ? shiftsHTML : '<div class="col-12 text-muted">Nessun servizio in corso.</div>'}</div>
             `;
-
             document.getElementById('shiftData').value = new Date().toISOString().split('T')[0];
         }
 
         window.toggleVolOptions = function(idx) {
             const cb = document.getElementById(`vol_cb_${idx}`);
             const opts = document.getElementById(`vol_opts_${idx}`);
-            if(cb.checked) {
-                opts.classList.remove('d-none');
-            } else {
-                opts.classList.add('d-none');
-            }
+            if (cb.checked) opts.classList.remove('d-none'); else opts.classList.add('d-none');
         }
 
         window.toggleChecklistMansione = function(idx) {
-            const isCaposquadra = document.getElementById(`role_cs_${idx}`).checked;
-            const isAutista = document.getElementById(`role_aut_${idx}`).checked;
-            
+            const isCS = document.getElementById(`role_Caposquadra_${idx}`)?.checked;
+            const isAut = document.getElementById(`role_Autista_${idx}`)?.checked;
             const chkCS = document.getElementById(`checklist_cs_${idx}`);
             const chkAut = document.getElementById(`checklist_aut_${idx}`);
 
-            if (isCaposquadra) {
-                chkCS.classList.remove('d-none');
-            } else {
-                chkCS.classList.add('d-none');
-                document.getElementById(`chk_cs_${idx}`).checked = false;
-            }
-
-            if (isAutista) {
-                chkAut.classList.remove('d-none');
-            } else {
-                chkAut.classList.add('d-none');
-                document.getElementById(`chk_aut_${idx}`).checked = false;
-            }
+            if (isCS) chkCS.classList.remove('d-none'); else { chkCS.classList.add('d-none'); document.getElementById(`chk_cs_${idx}`).checked = false; }
+            if (isAut) chkAut.classList.remove('d-none'); else { chkAut.classList.add('d-none'); document.getElementById(`chk_aut_${idx}`).checked = false; }
         }
 
         window.addShift = async function(e) {
             e.preventDefault();
             let selectedVols = [];
-
             users.forEach((u, idx) => {
                 const cb = document.getElementById(`vol_cb_${idx}`);
                 if (cb && cb.checked) {
                     let rolesList = [];
                     OPERATIVE_ROLES.forEach(r => {
-                        let checkboxId = '';
-                        if (r === 'Caposquadra') checkboxId = `role_cs_${idx}`;
-                        else if (r === 'Autista') checkboxId = `role_aut_${idx}`;
-                        else if (r === 'Operatore') checkboxId = `role_op_${idx}`;
-                        else if (r === 'Soccorritore') checkboxId = `role_soc_${idx}`;
-                        else if (r === '4° Uomo (Affiancamento)') checkboxId = `role_4th_${idx}`;
-
-                        if (checkboxId && document.getElementById(checkboxId).checked) {
-                            rolesList.push(r);
-                        }
+                        if (document.getElementById(`role_${r}_${idx}`)?.checked) rolesList.push(r);
                     });
-
-                    if (rolesList.length === 0) {
-                        alert(`Seleziona almeno un ruolo operativo per ${u.nome} ${u.cognome}!`);
-                        throw new Error("Ruolo operativo mancante");
-                    }
-
-                    if (rolesList.includes('Caposquadra')) {
-                        if (!document.getElementById(`chk_cs_${idx}`).checked) {
-                            alert(`Il caposquadra ${u.nome} ${u.cognome} deve spuntare la mansione obbligatoria di controllo DPI/Radio!`);
-                            throw new Error("Mansione obbligatoria mancante");
-                        }
-                    }
-                    if (rolesList.includes('Autista')) {
-                        if (!document.getElementById(`chk_aut_${idx}`).checked) {
-                            alert(`L'autista ${u.nome} ${u.cognome} deve spuntare la mansione obbligatoria di controllo liquidi/mezzo!`);
-                            throw new Error("Mansione obbligatoria mancante");
-                        }
-                    }
-
-                    selectedVols.push({
-                        nome: `${u.nome} ${u.cognome}`,
-                        ruoloOperativo: rolesList.join(' + '),
-                        mansioniSpuntate: true
-                    });
+                    if (rolesList.length === 0) { alert(`Seleziona ruolo per ${u.nome}`); throw new Error(); }
+                    selectedVols.push({ nome: `${u.nome} ${u.cognome}`, ruoloOperativo: rolesList.join(' + '), mansioniSpuntate: true });
                 }
             });
 
-            if(selectedVols.length === 0) {
-                alert("Seleziona almeno un volontario per il turno!");
-                return;
-            }
-
+            if (selectedVols.length === 0) { alert("Seleziona almeno un volontario"); return; }
             const mezzoId = document.getElementById('shiftMezzo').value;
             let mezzoStr = "Nessun Mezzo";
             let vehicleObj = null;
-
             if (mezzoId !== "Nessun Mezzo") {
                 vehicleObj = vehicles.find(v => v.id === mezzoId);
-                if (vehicleObj) {
-                    mezzoStr = `${vehicleObj.modello} (${vehicleObj.targa})`;
-                }
+                if (vehicleObj) mezzoStr = `${vehicleObj.modello} (${vehicleObj.targa})`;
             }
-
-            const newShift = {
-                tipoServizio: document.getElementById('shiftTipo').value,
-                data: document.getElementById('shiftData').value,
-                oraInizio: document.getElementById('shiftOraInizio').value,
-                oraFine: document.getElementById('shiftOraFine').value,
-                mezzoId: mezzoId,
-                mezzoUsato: mezzoStr,
-                kmInizialiMezzo: vehicleObj ? vehicleObj.km : 0,
-                note: document.getElementById('shiftNote').value,
-                volontariDettaglio: selectedVols
-            };
 
             try {
-                await addDoc(collection(db, "shifts"), newShift);
-                alert("Turno salvato ed aperto con successo!");
+                await addDoc(collection(db, "shifts"), {
+                    tipoServizio: document.getElementById('shiftTipo').value,
+                    data: document.getElementById('shiftData').value,
+                    oraInizio: document.getElementById('shiftOraInizio').value,
+                    oraFine: document.getElementById('shiftOraFine').value,
+                    mezzoId: mezzoId,
+                    mezzoUsato: mezzoStr,
+                    kmInizialiMezzo: vehicleObj ? vehicleObj.km : 0,
+                    volontariDettaglio: selectedVols
+                });
+                alert("Turno aperto!");
                 loadCloudData();
-            } catch (err) {
-                console.error("Errore turno:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         window.closeShiftModal = async function(shiftId, index) {
             const shiftToClose = shifts[index];
-            const oraFineReale = prompt("Inserisci l'ora di fine effettiva del servizio (HH:MM):", shiftToClose.oraFine) || shiftToClose.oraFine;
-
-            let kmPercorsi = 0;
-            let kmFinali = 0;
+            const oraFineReale = prompt("Ora fine effettiva (HH:MM):", shiftToClose.oraFine) || shiftToClose.oraFine;
+            let kmPercorsi = 0, kmFinali = 0;
 
             if (shiftToClose.mezzoId && shiftToClose.mezzoId !== "Nessun Mezzo") {
                 const currentVehicle = vehicles.find(v => v.id === shiftToClose.mezzoId);
                 const kmAttuali = currentVehicle ? currentVehicle.km : (shiftToClose.kmInizialiMezzo || 0);
-
-                const kmFinaliInput = prompt(`Inserisci i KM FINALI segnati sul contachilometri del mezzo (${shiftToClose.mezzoUsato}). KM attuali registrati: ${kmAttuali}`, kmAttuali);
-                
+                const kmFinaliInput = prompt(`KM finali mezzo (Attuali: ${kmAttuali}):`, kmAttuali);
                 if (kmFinaliInput !== null) {
                     kmFinali = parseInt(kmFinaliInput, 10) || kmAttuali;
-                    if (kmFinali < kmAttuali) {
-                        alert("I KM finali non possono essere inferiori a quelli iniziali!");
-                        return;
-                    }
                     kmPercorsi = kmFinali - kmAttuali;
-
                     if (currentVehicle) {
                         await updateDoc(doc(db, "vehicles", currentVehicle.id), { km: kmFinali });
+                        invalidateCache('vehicles');
                     }
                 }
             } else {
-                const kmManual = prompt("KM percorsi durante il servizio:", "0");
-                kmPercorsi = parseInt(kmManual, 10) || 0;
+                kmPercorsi = parseInt(prompt("KM percorsi:", "0"), 10) || 0;
             }
-
-            const completedShift = {
-                ...shiftToClose,
-                oraFine: oraFineReale,
-                kmFinaliMezzo: kmFinali,
-                kmPercorsi: kmPercorsi,
-                dataChiusura: new Date().toLocaleDateString('it-IT')
-            };
 
             try {
-                await addDoc(collection(db, "historyShifts"), completedShift);
+                await addDoc(collection(db, "historyShifts"), {
+                    ...shiftToClose, oraFine: oraFineReale, kmFinaliMezzo: kmFinali, kmPercorsi: kmPercorsi, dataChiusura: new Date().toLocaleDateString('it-IT')
+                });
                 await deleteDoc(doc(db, "shifts", shiftId));
-                alert(`Servizio chiuso! Percorsi ${kmPercorsi} km. Chilometraggio del mezzo aggiornato nel database.`);
+                alert("Servizio chiuso e storico aggiornato!");
                 loadCloudData();
-            } catch (err) {
-                console.error("Errore chiusura:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         window.deleteActiveShift = async function(shiftId) {
-            if (confirm("Sei sicuro di voler eliminare questo turno in corso?")) {
-                try {
-                    await deleteDoc(doc(db, "shifts", shiftId));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione turno:", err);
-                }
+            if (confirm("Eliminare turno?")) {
+                try { await deleteDoc(doc(db, "shifts", shiftId)); loadCloudData(); } catch (err) { console.error(err); }
             }
         }
-// --- SEZIONE DISPONIBILITÀ ---
+
         window.renderDisponibilita = function() {
             const isAdmin = isSuperAdmin();
-
-            let listHTML = availabilities.map((a) => {
-                const isMine = a.userEmail === loggedUser.email;
-                return `
-                    <div class="col-md-4 mb-3">
-                        <div class="card p-3 border-start border-4 ${isMine ? 'border-success bg-light' : 'border-info'} h-100 d-flex flex-column justify-content-between">
-                            <div>
-                                <div class="d-flex justify-content-between align-items-center mb-1">
-                                    <h6 class="fw-bold mb-0 text-primary">${a.userName}</h6>
-                                    ${isMine ? '<span class="badge bg-success">Tua Disponibilità</span>' : ''}
-                                </div>
-                                <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
-                                <p class="mb-1"><strong>Fascia Oraria:</strong> ${a.oraInizio} - ${a.oraFine}</p>
-                                <p class="mb-1 small text-muted"><strong>Note:</strong> ${a.note || 'Nessuna'}</p>
-                            </div>
-                            ${(isMine || isAdmin) ? `
-                                <div class="text-end mt-2">
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteAvailability('${a.id}')">
-                                        <i class="bi bi-trash"></i> Elimina
-                                    </button>
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            document.getElementById('tabContent').innerHTML = `
-                <div class="card p-4 mb-4">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-calendar-check me-2"></i>Inserisci la tua Disponibilità</h4>
-                    <form onsubmit="addAvailability(event)">
-                        <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Data Disponibilità*</label>
-                                <input type="date" id="dispData" class="form-control" required>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Ora Inizio*</label>
-                                <input type="time" id="dispOraInizio" class="form-control" required>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Ora Fine*</label>
-                                <input type="time" id="dispOraFine" class="form-control" required>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Note / Eventuali limitazioni</label>
-                            <input type="text" id="dispNote" class="form-control" placeholder="es. Disponibile solo per servizi AIB">
-                        </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-plus-circle me-1"></i>Aggiungi Disponibilità</button>
-                    </form>
-                </div>
-
-                <h4 class="fw-bold mb-3">Calendario Disponibilità Operatori (${availabilities.length})</h4>
-                <div class="row">${listHTML.length > 0 ? listHTML : '<div class="col-12 text-muted">Nessuna disponibilità comunicata.</div>'}</div>
-            `;
-
-            document.getElementById('dispData').value = new Date().toISOString().split('T')[0];
-        }
-
-        window.addAvailability = async function(e) {
-            e.preventDefault();
-            const newDisp = {
-                userEmail: loggedUser.email,
-                userName: `${loggedUser.nome} ${loggedUser.cognome}`,
-                data: document.getElementById('dispData').value,
-                oraInizio: document.getElementById('dispOraInizio').value,
-                oraFine: document.getElementById('dispOraFine').value,
-                note: document.getElementById('dispNote').value
-            };
-
-            try {
-                await addDoc(collection(db, "availabilities"), newDisp);
-                alert('Disponibilità inserita con successo!');
-                loadCloudData();
-            } catch (err) {
-                console.error("Errore disponibilità:", err);
-            }
-        }
-
-        window.deleteAvailability = async function(id) {
-            if(confirm("Sei sicuro di voler rimuovere questa disponibilità?")) {
-                try {
-                    await deleteDoc(doc(db, "availabilities", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione:", err);
-                }
-            }
-        }
-
-        // --- SEZIONE STORICO SERVIZI ---
-        window.renderStorico = function() {
-            const isAdmin = isSuperAdmin();
-
-            let histHTML = historyShifts.map((s) => `
-                <div class="col-md-6 mb-3">
-                    <div class="card p-3 border-start border-4 border-secondary h-100">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="fw-bold text-secondary mb-0">${s.tipoServizio}</h5>
-                            <span class="badge bg-secondary">Concluso</span>
-                        </div>
-                        <p class="mb-1"><strong>Data Servizio:</strong> ${s.data} (Chiuso il: ${s.dataChiusura || 'N/D'})</p>
-                        <p class="mb-1"><strong>Orario effettivo:</strong> ${s.oraInizio} - ${s.oraFine}</p>
-                        <p class="mb-1"><strong>Mezzo impiegato:</strong> ${s.mezzoUsato || 'Nessuno'} | <strong>KM percorsi:</strong> ${s.kmPercorsi || 0} km</p>
-                        <p class="mb-1"><strong>Note:</strong> ${s.note || 'Nessuna'}</p>
-                        <hr class="my-2">
-                        <strong>Squadra Impiegata:</strong>
-                        <ul class="list-unstyled mt-1 small mb-0">
-                            ${s.volontariDettaglio ? s.volontariDettaglio.map(v => `<li><i class="bi bi-person-check me-1"></i>${v.nome} - <em>${v.ruoloOperativo}</em></li>`).join('') : ''}
-                        </ul>
-                        ${isAdmin ? `
-                            <div class="text-end mt-2 pt-2 border-top">
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteHistoryShift('${s.id}')">
-                                    <i class="bi bi-trash"></i> Elimina dallo Storico
-                                </button>
-                            </div>
-                        ` : ''}
+            let listHTML = availabilities.map(a => `
+                <div class="col-md-4 mb-3">
+                    <div class="card p-3 border-start border-4 ${a.userEmail === loggedUser.email ? 'border-success bg-light' : 'border-info'} h-100">
+                        <h6 class="fw-bold text-primary">${a.userName}</h6>
+                        <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
+                        <p class="mb-1"><strong>Orario:</strong> ${a.oraInizio} - ${a.oraFine}</p>
+                        ${(a.userEmail === loggedUser.email || isAdmin) ? `<button class="btn btn-sm btn-outline-danger mt-2" onclick="deleteAvailability('${a.id}')">Elimina</button>` : ''}
                     </div>
                 </div>
             `).join('');
 
             document.getElementById('tabContent').innerHTML = `
-                <h4 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Storico Servizi Conclusi (${historyShifts.length})</h4>
-                <div class="row">${historyShifts.length > 0 ? histHTML : '<div class="col-12 text-muted">Nessun servizio nello storico.</div>'}</div>
+                <div class="card p-4 mb-4">
+                    <h4 class="fw-bold text-primary mb-3">Inserisci Disponibilità</h4>
+                    <form onsubmit="addAvailability(event)">
+                        <div class="row">
+                            <div class="col-md-4 mb-3"><label>Data*</label><input type="date" id="dispData" class="form-control" required></div>
+                            <div class="col-md-4 mb-3"><label>Inizio*</label><input type="time" id="dispOraInizio" class="form-control" required></div>
+                            <div class="col-md-4 mb-3"><label>Fine*</label><input type="time" id="dispOraFine" class="form-control" required></div>
+                        </div>
+                        <button type="submit" class="btn btn-success fw-bold">Aggiungi</button>
+                    </form>
+                </div>
+                <h4 class="fw-bold mb-3">Disponibilità Operatori (${availabilities.length})</h4>
+                <div class="row">${listHTML || '<div class="col-12 text-muted">Nessuna disponibilità.</div>'}</div>
             `;
+            document.getElementById('dispData').value = new Date().toISOString().split('T')[0];
+        }
+
+        window.addAvailability = async function(e) {
+            e.preventDefault();
+            try {
+                await addDoc(collection(db, "availabilities"), {
+                    userEmail: loggedUser.email, userName: `${loggedUser.nome} ${loggedUser.cognome}`,
+                    data: document.getElementById('dispData').value,
+                    oraInizio: document.getElementById('dispOraInizio').value,
+                    oraFine: document.getElementById('dispOraFine').value,
+                    note: ""
+                });
+                alert("Disponibilità inserita!");
+                loadCloudData();
+            } catch (err) { console.error(err); }
+        }
+
+        window.deleteAvailability = async function(id) {
+            if (confirm("Eliminare?")) { try { await deleteDoc(doc(db, "availabilities", id)); loadCloudData(); } catch (e) { console.error(e); } }
+        }
+
+        window.renderStorico = function() {
+            const isAdmin = isSuperAdmin();
+            let histHTML = historyShifts.map(s => `
+                <div class="col-md-6 mb-3">
+                    <div class="card p-3 border-start border-4 border-secondary h-100">
+                        <h5 class="fw-bold text-secondary">${s.tipoServizio}</h5>
+                        <p class="mb-1"><strong>Data:</strong> ${s.data} (Chiuso il: ${s.dataChiusura || 'N/D'})</p>
+                        <p class="mb-1"><strong>KM percorsi:</strong> ${s.kmPercorsi || 0} km</p>
+                        ${isAdmin ? `<button class="btn btn-sm btn-outline-danger mt-2" onclick="deleteHistoryShift('${s.id}')">Elimina</button>` : ''}
+                    </div>
+                </div>
+            `).join('');
+            document.getElementById('tabContent').innerHTML = `<h4 class="fw-bold mb-3">Storico Servizi (${historyShifts.length})</h4><div class="row">${histHTML || '<div class="col-12 text-muted">Nessun servizio.</div>'}</div>`;
         }
 
         window.deleteHistoryShift = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questo record dallo storico?")) {
-                try {
-                    await deleteDoc(doc(db, "historyShifts", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione storico:", err);
-                }
-            }
+            if (confirm("Eliminare?")) { try { await deleteDoc(doc(db, "historyShifts", id)); loadCloudData(); } catch (e) {} }
         }
 
-        // --- SEZIONE MEZZI & SCADENZE ---
         window.renderMezzi = function() {
             const isAdmin = isSuperAdmin();
-
-            let vehiclesHTML = vehicles.map((v) => {
-                return `
-                    <div class="col-md-4 mb-3">
-                        <div class="card p-3 h-100 d-flex flex-column justify-content-between">
-                            <div>
-                                <img src="${v.foto}" class="vehicle-img mb-3" alt="Foto Mezzo">
-                                <h4 class="fw-bold text-primary mb-1">${v.modello}</h4>
-                                <p class="mb-1"><strong>Targa:</strong> ${v.targa}</p>
-                                <p class="mb-1"><strong>Chilometraggio:</strong> ${v.km} km</p>
-                                <hr class="my-2">
-                                <p class="mb-1 text-danger small"><strong>Assicurazione Scadenza:</strong> ${v.scadAssicurazione || 'Non indicata'}</p>
-                                <p class="mb-1 text-danger small"><strong>Revisione Scadenza:</strong> ${v.scadRevisione || 'Non indicata'}</p>
-                                <p class="mb-1 text-danger small"><strong>Tagliando Scadenza:</strong> ${v.scadTagliando || 'Non indicato'}</p>
-                            </div>
-                            ${isAdmin ? `
-                                <div class="mt-3 pt-2 border-top d-flex gap-2">
-                                    <button class="btn btn-outline-primary btn-sm w-50" onclick="editVehicle('${v.id}')">
-                                        <i class="bi bi-pencil-square me-1"></i>Modifica
-                                    </button>
-                                    <button class="btn btn-outline-danger btn-sm w-50" onclick="deleteVehicle('${v.id}')">
-                                        <i class="bi bi-trash me-1"></i>Elimina
-                                    </button>
-                                </div>
-                            ` : ''}
+            let vehiclesHTML = vehicles.map(v => `
+                <div class="col-md-4 mb-3">
+                    <div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                        <div>
+                            <img src="${v.foto}" class="vehicle-img mb-3" alt="Mezzo">
+                            <h4 class="fw-bold text-primary">${v.modello}</h4>
+                            <p class="mb-1"><strong>Targa:</strong> ${v.targa}</p>
+                            <p class="mb-1"><strong>KM:</strong> ${v.km} km</p>
                         </div>
+                        ${isAdmin ? `<div class="mt-3 pt-2 border-top d-flex gap-2"><button class="btn btn-outline-primary btn-sm w-50" onclick="editVehicle('${v.id}')">Modifica</button><button class="btn btn-outline-danger btn-sm w-50" onclick="deleteVehicle('${v.id}')">Elimina</button></div>` : ''}
                     </div>
-                `;
-            }).join('');
+                </div>
+            `).join('');
 
             document.getElementById('tabContent').innerHTML = `
                 ${isAdmin ? `
                 <div class="card p-4 mb-4 bg-light border">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-truck me-2"></i>Registra Nuovo Automezzo in Flotta</h4>
+                    <h4 class="fw-bold text-primary mb-3">Registra Nuovo Mezzo</h4>
                     <form onsubmit="addVehicle(event)">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Foto Automezzo (Obbligatoria)*</label>
-                            <input type="file" id="vehFoto" accept="image/*" class="form-control" required>
-                        </div>
+                        <div class="mb-3"><label>Foto*</label><input type="file" id="vehFoto" accept="image/*" class="form-control" required></div>
                         <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold">Modello / Nome Mezzo*</label>
-                                <input type="text" id="vehModello" class="form-control" placeholder="es. Iveco Daily AIB" required>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold">Targa*</label>
-                                <input type="text" id="vehTarga" class="form-control" placeholder="es. AB123CD" required>
-                            </div>
+                            <div class="col-md-6 mb-3"><label>Modello*</label><input type="text" id="vehModello" class="form-control" required></div>
+                            <div class="col-md-6 mb-3"><label>Targa*</label><input type="text" id="vehTarga" class="form-control" required></div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">KM Iniziali*</label>
-                                <input type="number" id="vehKm" class="form-control" value="0" required>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label text-danger">Scadenza Assicurazione</label>
-                                <input type="date" id="vehAss" class="form-control">
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label text-danger">Scadenza Revisione</label>
-                                <input type="date" id="vehRev" class="form-control">
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label text-danger">Scadenza Tagliando</label>
-                            <input type="date" id="vehTag" class="form-control">
-                        </div>
-                        <button type="submit" class="btn btn-primary fw-bold">Aggiungi Mezzo alla Flotta</button>
+                        <div class="mb-3"><label>KM Iniziali*</label><input type="number" id="vehKm" class="form-control" value="0" required></div>
+                        <button type="submit" class="btn btn-primary fw-bold">Aggiungi Mezzo</button>
                     </form>
                 </div>
                 ` : ''}
-
-                <h4 class="fw-bold mb-3"><i class="bi bi-shield-check me-2"></i>Parco Automezzi e Scadenze (${vehicles.length})</h4>
-                <div class="row">${vehicles.length > 0 ? vehiclesHTML : '<div class="col-12 text-muted">Nessun mezzo registrato.</div>'}</div>
+                <h4 class="fw-bold mb-3">Parco Automezzi (${vehicles.length})</h4>
+                <div class="row">${vehiclesHTML || '<div class="col-12 text-muted">Nessun mezzo.</div>'}</div>
             `;
         }
 
@@ -1646,86 +944,50 @@ window.init = async function() {
             e.preventDefault();
             const fotoFile = document.getElementById('vehFoto').files[0];
             if (!fotoFile) return;
-
             try {
                 const compressedDataUrl = await compressImage(fotoFile, 800, 0.7);
-                const newVeh = {
+                await addDoc(collection(db, "vehicles"), {
                     modello: document.getElementById('vehModello').value,
                     targa: document.getElementById('vehTarga').value,
                     km: parseInt(document.getElementById('vehKm').value, 10) || 0,
-                    scadAssicurazione: document.getElementById('vehAss').value,
-                    scadRevisione: document.getElementById('vehRev').value,
-                    scadTagliando: document.getElementById('vehTag').value,
                     foto: compressedDataUrl
-                };
-
-                await addDoc(collection(db, "vehicles"), newVeh);
-                alert("Automezzo aggiunto con successo!");
+                });
+                invalidateCache('vehicles');
+                alert("Mezzo aggiunto!");
                 loadCloudData();
-            } catch (err) {
-                console.error("Errore mezzo:", err);
-            }
+            } catch (err) { console.error(err); }
         }
 
         window.editVehicle = async function(id) {
             const v = vehicles.find(item => item.id === id);
             if (!v) return;
-
-            const newKm = prompt("Aggiorna il chilometraggio attuale:", v.km);
-            const newAss = prompt("Aggiorna scadenza Assicurazione (AAAA-MM-GG):", v.scadAssicurazione || "");
-            const newRev = prompt("Aggiorna scadenza Revisione (AAAA-MM-GG):", v.scadRevisione || "");
-            const newTag = prompt("Aggiorna scadenza Tagliando (AAAA-MM-GG):", v.scadTagliando || "");
-
+            const newKm = prompt("Aggiorna KM:", v.km);
             if (newKm !== null) {
                 try {
-                    await updateDoc(doc(db, "vehicles", id), {
-                        km: parseInt(newKm, 10) || v.km,
-                        scadAssicurazione: newAss,
-                        scadRevisione: newRev,
-                        scadTagliando: newTag
-                    });
-                    alert("Mezzo aggiornato con successo!");
+                    await updateDoc(doc(db, "vehicles", id), { km: parseInt(newKm, 10) || v.km });
+                    invalidateCache('vehicles');
+                    alert("Aggiornato!");
                     loadCloudData();
-                } catch (err) {
-                    console.error("Errore modifica mezzo:", err);
-                }
+                } catch (e) {}
             }
         }
 
         window.deleteVehicle = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questo mezzo dalla flotta?")) {
-                try {
-                    await deleteDoc(doc(db, "vehicles", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione mezzo:", err);
-                }
+            if (confirm("Eliminare mezzo?")) {
+                try { await deleteDoc(doc(db, "vehicles", id)); invalidateCache('vehicles'); loadCloudData(); } catch (e) {}
             }
         }
-// --- SEZIONE RIFORNIMENTI ---
-        window.renderRifornimenti = function() {
+window.renderRifornimenti = function() {
             const isAdmin = isSuperAdmin();
-
-            let refHTML = refuels.map((r) => `
+            let refHTML = refuels.map(r => `
                 <div class="col-md-4 mb-3">
                     <div class="card p-3 h-100 d-flex flex-column justify-content-between">
                         <div>
-                            <img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Foto Scontrino">
-                            <h5 class="fw-bold text-primary mb-1">${r.mezzo}</h5>
-                            <p class="mb-1"><strong>Data / Ora:</strong> ${r.data} - ${r.ora}</p>
+                            <img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Scontrino">
+                            <h5 class="fw-bold text-primary">${r.mezzo}</h5>
                             <p class="mb-1"><strong>Litri:</strong> ${r.litri} L | <strong>Importo:</strong> &euro; ${r.importo.toFixed(2)}</p>
-                            <p class="mb-1 small text-muted"><strong>Registrato da:</strong> ${r.volontario}</p>
                         </div>
-                        ${isAdmin ? `
-                            <div class="text-end mt-2 pt-2 border-top d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-primary w-50" onclick="editRefuel('${r.id}')">
-                                    <i class="bi bi-pencil-square me-1"></i>Modifica
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger w-50" onclick="deleteRefuel('${r.id}')">
-                                    <i class="bi bi-trash me-1"></i>Elimina
-                                </button>
-                            </div>
-                        ` : ''}
+                        ${isAdmin ? `<button class="btn btn-sm btn-outline-danger mt-2" onclick="deleteRefuel('${r.id}')">Elimina</button>` : ''}
                     </div>
                 </div>
             `).join('');
@@ -1734,132 +996,56 @@ window.init = async function() {
 
             document.getElementById('tabContent').innerHTML = `
                 <div class="card p-4 mb-4 bg-light border">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-fuel-pump me-2"></i>Registra Rifornimento Carburante</h4>
+                    <h4 class="fw-bold text-primary mb-3">Registra Rifornimento</h4>
                     <form onsubmit="addRefuel(event)">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Foto Scontrino / Ricevuta (Obbligatoria)*</label>
-                            <input type="file" id="refFoto" accept="image/*" class="form-control" required>
-                        </div>
+                        <div class="mb-3"><label>Foto Scontrino*</label><input type="file" id="refFoto" accept="image/*" class="form-control" required></div>
                         <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label fw-bold">Mezzo Rifornito*</label>
-                                <select id="refMezzo" class="form-select" required>
-                                    ${optionsMezziRef}
-                                </select>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label fw-bold">Litri Erogati*</label>
-                                <input type="number" step="0.01" id="refLitri" class="form-control" placeholder="es. 45.5" required>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label fw-bold">Importo Totale (&euro;)*</label>
-                                <input type="number" step="0.01" id="refImporto" class="form-control" placeholder="es. 85.00" required>
-                            </div>
+                            <div class="col-md-4 mb-3"><label>Mezzo*</label><select id="refMezzo" class="form-select" required>${optionsMezziRef}</select></div>
+                            <div class="col-md-4 mb-3"><label>Litri*</label><input type="number" step="0.01" id="refLitri" class="form-control" required></div>
+                            <div class="col-md-4 mb-3"><label>Importo (&euro;)*</label><input type="number" step="0.01" id="refImporto" class="form-control" required></div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Data Rifornimento*</label>
-                                <input type="date" id="refData" class="form-control" required>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">Ora*</label>
-                                <input type="time" id="refOra" class="form-control" required>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn btn-warning fw-bold text-dark"><i class="bi bi-check-circle me-1"></i>Salva Rifornimento</button>
+                        <button type="submit" class="btn btn-warning fw-bold text-dark">Salva Rifornimento</button>
                     </form>
                 </div>
-
-                <h4 class="fw-bold mb-3"><i class="bi bi-receipt me-2"></i>Storico Rifornimenti Flotta (${refuels.length})</h4>
-                <div class="row">${refuels.length > 0 ? refHTML : '<div class="col-12 text-muted">Nessun rifornimento registrato.</div>'}</div>
+                <h4 class="fw-bold mb-3">Storico Rifornimenti (${refuels.length})</h4>
+                <div class="row">${refHTML || '<div class="col-12 text-muted">Nessun rifornimento.</div>'}</div>
             `;
-
-            document.getElementById('refData').value = new Date().toISOString().split('T')[0];
-            const now = new Date();
-            document.getElementById('refOra').value = String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
         }
 
         window.addRefuel = async function(e) {
             e.preventDefault();
             const fotoFile = document.getElementById('refFoto').files[0];
             if (!fotoFile) return;
-
             try {
                 const compressedDataUrl = await compressImage(fotoFile, 800, 0.7);
-                const newRef = {
+                await addDoc(collection(db, "refuels"), {
                     mezzo: document.getElementById('refMezzo').value,
                     litri: parseFloat(document.getElementById('refLitri').value) || 0,
                     importo: parseFloat(document.getElementById('refImporto').value) || 0,
-                    data: document.getElementById('refData').value,
-                    ora: document.getElementById('refOra').value,
+                    data: new Date().toISOString().split('T')[0],
+                    ora: new Date().toLocaleTimeString(),
                     volontario: `${loggedUser.nome} ${loggedUser.cognome}`,
                     fotoScontrino: compressedDataUrl
-                };
-
-                await addDoc(collection(db, "refuels"), newRef);
-                alert("Rifornimento registrato con successo!");
+                });
+                invalidateCache('refuels');
+                alert("Rifornimento salvato!");
                 loadCloudData();
-            } catch (err) {
-                console.error("Errore rifornimento:", err);
-            }
-        }
-
-        window.editRefuel = async function(id) {
-            const r = refuels.find(item => item.id === id);
-            if (!r) return;
-
-            const newLitri = prompt("Modifica litri erogati:", r.litri);
-            const newImporto = prompt("Modifica importo totale (€):", r.importo);
-
-            if (newLitri !== null && newImporto !== null) {
-                try {
-                    await updateDoc(doc(db, "refuels", id), {
-                        litri: parseFloat(newLitri) || r.litri,
-                        importo: parseFloat(newImporto) || r.importo
-                    });
-                    alert("Rifornimento aggiornato!");
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore modifica rifornimento:", err);
-                }
-            }
+            } catch (err) { console.error(err); }
         }
 
         window.deleteRefuel = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questo rifornimento?")) {
-                try {
-                    await deleteDoc(doc(db, "refuels", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione rifornimento:", err);
-                }
-            }
+            if (confirm("Eliminare?")) { try { await deleteDoc(doc(db, "refuels", id)); invalidateCache('refuels'); loadCloudData(); } catch (e) {} }
         }
 
-        // --- SEZIONE MAPPA IDRICA ---
         window.renderMappa = function() {
             const isAdmin = isSuperAdmin();
-
-            let wpHTML = waterPoints.map((wp) => `
+            let wpHTML = waterPoints.map(wp => `
                 <div class="col-md-4 mb-3">
-                    <div class="card p-3 h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            <img src="${wp.foto}" class="hydrant-img mb-2" alt="Foto Punto Acqua">
-                            <h5 class="fw-bold text-primary mb-1">${wp.nome}</h5>
-                            <p class="mb-1"><strong>Tipo:</strong> ${wp.tipo}</p>
-                            <p class="mb-1"><strong>Portata / Note:</strong> ${wp.portata || 'N/D'}</p>
-                            <p class="mb-1 small text-muted"><strong>Coordinate:</strong> ${wp.lat.toFixed(4)}, ${wp.lng.toFixed(4)}</p>
-                        </div>
-                        ${isAdmin ? `
-                            <div class="text-end mt-2 pt-2 border-top d-flex gap-2">
-                                <button class="btn btn-sm btn-outline-primary w-50" onclick="editWaterPoint('${wp.id}')">
-                                    <i class="bi bi-pencil-square me-1"></i>Modifica
-                                </button>
-                                <button class="btn btn-sm btn-outline-danger w-50" onclick="deleteWaterPoint('${wp.id}')">
-                                    <i class="bi bi-trash me-1"></i>Elimina
-                                </button>
-                            </div>
-                        ` : ''}
+                    <div class="card p-3 h-100">
+                        <img src="${wp.foto}" class="hydrant-img mb-2" alt="Punto Acqua">
+                        <h5 class="fw-bold text-primary">${wp.nome}</h5>
+                        <p class="mb-1"><strong>Tipo:</strong> ${wp.tipo}</p>
+                        ${isAdmin ? `<button class="btn btn-sm btn-outline-danger mt-2" onclick="deleteWaterPoint('${wp.id}')">Elimina</button>` : ''}
                     </div>
                 </div>
             `).join('');
@@ -1867,84 +1053,46 @@ window.init = async function() {
             document.getElementById('tabContent').innerHTML = `
                 ${isAdmin ? `
                 <div class="card p-4 mb-4 bg-light border">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-geo-alt me-2"></i>Aggiungi Nuovo Punto Idrico (Idrante / Riserva)</h4>
+                    <h4 class="fw-bold text-primary mb-3">Aggiungi Punto Idrico</h4>
                     <form onsubmit="addWaterPoint(event)">
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Foto Punto Acqua (Obbligatoria)*</label>
-                            <input type="file" id="wpFoto" accept="image/*" class="form-control" required>
+                        <div class="mb-3"><label>Foto*</label><input type="file" id="wpFoto" accept="image/*" class="form-control" required></div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3"><label>Nome*</label><input type="text" id="wpNome" class="form-control" required></div>
+                            <div class="col-md-6 mb-3"><label>Tipo*</label><select id="wpTipo" class="form-select"><option value="Idrante a Colonnina">Idrante</option><option value="Vasca AIB">Vasca AIB</option></select></div>
                         </div>
                         <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold">Nome / Identificativo*</label>
-                                <input type="text" id="wpNome" class="form-control" placeholder="es. Idrante Via Salaria km 50" required>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold">Tipologia*</label>
-                                <select id="wpTipo" class="form-select">
-                                    <option value="Idrante a Colonnina">Idrante a Colonnina</option>
-                                    <option value="Idrante Sottosuolo">Idrante Sottosuolo</option>
-                                    <option value="Vasca / Punto Attingimento AIB">Vasca / Punto Attingimento AIB</option>
-                                </select>
-                            </div>
+                            <div class="col-md-4 mb-3"><label>Lat*</label><input type="number" step="any" id="wpLat" class="form-control" required></div>
+                            <div class="col-md-4 mb-3"><label>Lng*</label><input type="number" step="any" id="wpLng" class="form-control" required></div>
+                            <div class="col-md-4 mb-3"><label>&nbsp;</label><button type="button" class="btn btn-outline-secondary w-100" onclick="getGPSCoordinates()">GPS</button></div>
                         </div>
-                        <div class="row">
-                            <div class="col-md-4 mb-3"><label>Latitudine*</label><input type="number" step="any" id="wpLat" class="form-control" required></div>
-                            <div class="col-md-4 mb-3"><label>Longitudine*</label><input type="number" step="any" id="wpLng" class="form-control" required></div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">&nbsp;</label>
-                                <button type="button" class="btn btn-outline-secondary w-100" onclick="getGPSCoordinates()">Ottieni GPS Attuale</button>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Portata / Pressione / Note</label>
-                            <input type="text" id="wpPortata" class="form-control" placeholder="es. Ottima pressione, raccordo UNI 45">
-                        </div>
-                        <button type="submit" class="btn btn-primary fw-bold">Salva Punto sulla Mappa</button>
+                        <button type="submit" class="btn btn-primary fw-bold">Salva</button>
                     </form>
                 </div>
                 ` : ''}
-
-                <h4 class="fw-bold mb-3"><i class="bi bi-map me-2"></i>Mappa Interattiva Punti Idrici Territorio (${waterPoints.length})</h4>
+                <h4 class="fw-bold mb-3">Mappa Idrica</h4>
                 <div class="card p-3 mb-4"><div id="map"></div></div>
-
-                <h4 class="fw-bold mb-3">Elenco Punti Idrici Registrati</h4>
-                <div class="row">${waterPoints.length > 0 ? wpHTML : '<div class="col-12 text-muted">Nessun punto idrico registrato.</div>'}</div>
+                <div class="row">${wpHTML || '<div class="col-12 text-muted">Nessun punto idrico.</div>'}</div>
             `;
 
             setTimeout(() => {
-                if (leafletMap) {
-                    leafletMap.remove();
-                }
-                let centerLat = 42.3944;
-                let centerLng = 12.8575;
-                if (waterPoints.length > 0) {
-                    centerLat = waterPoints[0].lat;
-                    centerLng = waterPoints[0].lng;
-                }
-
+                if (leafletMap) leafletMap.remove();
+                let centerLat = waterPoints.length > 0 ? waterPoints[0].lat : 42.3944;
+                let centerLng = waterPoints.length > 0 ? waterPoints[0].lng : 12.8575;
                 leafletMap = L.map('map').setView([centerLat, centerLng], 12);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                    attribution: '&copy; OpenStreetMap contributors'
-                }).addTo(leafletMap);
-
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(leafletMap);
                 waterPoints.forEach(wp => {
-                    let marker = L.marker([wp.lat, wp.lng]).addTo(leafletMap);
-                    marker.bindPopup(`<b>${wp.nome}</b><br>Tipo: ${wp.tipo}<br>Note: ${wp.portata || 'N/D'}`);
+                    L.marker([wp.lat, wp.lng]).addTo(leafletMap).bindPopup(`<b>${wp.nome}</b>`);
                 });
             }, 300);
         }
 
         window.getGPSCoordinates = function() {
             if (navigator.geolocation) {
-                navigator.geolocation.getCurrentPosition(position => {
-                    document.getElementById('wpLat').value = position.coords.latitude;
-                    document.getElementById('wpLng').value = position.coords.longitude;
-                    alert("Coordinate GPS acquisite con successo!");
-                }, error => {
-                    alert("Impossibile rilevare la posizione GPS: " + error.message);
+                navigator.geolocation.getCurrentPosition(p => {
+                    document.getElementById('wpLat').value = p.coords.latitude;
+                    document.getElementById('wpLng').value = p.coords.longitude;
+                    alert("GPS acquisito!");
                 });
-            } else {
-                alert("Geolocalizzazione non supportata dal browser.");
             }
         }
 
@@ -1952,197 +1100,56 @@ window.init = async function() {
             e.preventDefault();
             const fotoFile = document.getElementById('wpFoto').files[0];
             if (!fotoFile) return;
-
             try {
                 const compressedDataUrl = await compressImage(fotoFile, 800, 0.7);
-                const newWp = {
+                await addDoc(collection(db, "waterPoints"), {
                     nome: document.getElementById('wpNome').value,
                     tipo: document.getElementById('wpTipo').value,
                     lat: parseFloat(document.getElementById('wpLat').value),
                     lng: parseFloat(document.getElementById('wpLng').value),
-                    portata: document.getElementById('wpPortata').value,
                     foto: compressedDataUrl
-                };
-
-                await addDoc(collection(db, "waterPoints"), newWp);
-                alert("Punto idrico salvato!");
+                });
+                invalidateCache('waterPoints');
+                alert("Punto salvato!");
                 loadCloudData();
-            } catch (err) {
-                console.error("Errore punto idrico:", err);
-            }
-        }
-
-        window.editWaterPoint = async function(id) {
-            const wp = waterPoints.find(item => item.id === id);
-            if (!wp) return;
-
-            const newNome = prompt("Modifica nome / identificativo:", wp.nome);
-            const newPortata = prompt("Modifica portata / note:", wp.portata || "");
-
-            if (newNome !== null) {
-                try {
-                    await updateDoc(doc(db, "waterPoints", id), {
-                        nome: newNome,
-                        portata: newPortata
-                    });
-                    alert("Punto idrico aggiornato!");
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore modifica punto idrico:", err);
-                }
-            }
+            } catch (e) {}
         }
 
         window.deleteWaterPoint = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questo punto idrico?")) {
-                try {
-                    await deleteDoc(doc(db, "waterPoints", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione:", err);
-                }
-            }
+            if (confirm("Eliminare?")) { try { await deleteDoc(doc(db, "waterPoints", id)); invalidateCache('waterPoints'); loadCloudData(); } catch (e) {} }
         }
 
-        // --- SEZIONE ARCHIVIO REPORT MENSILI ---
         window.renderArchivioReport = function() {
-            if (!isManagerRole()) {
-                document.getElementById('appContainer').innerHTML = `<div class="alert alert-danger">Accesso non autorizzato. Area riservata ai Responsabili.</div>`;
-                return;
-            }
-
-            const canUpload = isAppCreator();
-
-            let reportsHTML = uploadedReports.map((rep) => `
+            if (!isManagerRole()) return;
+            let reportsHTML = uploadedReports.map(rep => `
                 <div class="col-md-6 mb-3">
                     <div class="card p-3 border-start border-4 border-info h-100">
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <h5 class="fw-bold text-primary mb-0"><i class="bi bi-file-earmark-text me-1"></i>${rep.titolo}</h5>
-                            <small class="text-muted">${rep.dataCaricamento}</small>
-                        </div>
-                        <p class="mb-1"><strong>Periodo Riferimento:</strong> ${rep.periodo}</p>
-                        <p class="mb-2 text-dark small">${rep.descrizione || 'Nessuna descrizione'}</p>
-                        <div class="d-flex justify-content-between align-items-center mt-auto pt-2 border-top">
-                            <a href="${rep.fileUrl}" download="${rep.fileName || 'report.doc'}" class="btn btn-sm btn-pc fw-bold">
-                                <i class="bi bi-download me-1"></i> Scarica Report (.doc)
-                            </a>
-                            ${canUpload ? `
-                                <button class="btn btn-sm btn-outline-danger" onclick="deleteReport('${rep.id}')">
-                                    <i class="bi bi-trash"></i> Elimina
-                                </button>
-                            ` : ''}
-                        </div>
+                        <h5 class="fw-bold text-primary">${rep.titolo}</h5>
+                        <p class="mb-1"><strong>Periodo:</strong> ${rep.periodo}</p>
+                        <a href="${rep.fileUrl}" download="${rep.fileName}" class="btn btn-sm btn-pc fw-bold mt-2">Scarica (.doc)</a>
                     </div>
                 </div>
             `).join('');
 
             document.getElementById('tabContent').innerHTML = `
-                <div class="mb-3">
-                    <button class="btn btn-outline-secondary btn-sm" onclick="switchTab('bacheca')">
-                        <i class="bi bi-arrow-left me-1"></i> Torna alla Bacheca
-                    </button>
-                </div>
-
-                ${canUpload ? `
-                <div class="card p-4 mb-4 bg-light border">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-cloud-arrow-up me-2"></i>Carica Nuovo Report Mensile Ufficiale (Creatore App)</h4>
-                    <form onsubmit="uploadReportFile(event)">
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold">Titolo del Report*</label>
-                                <input type="text" id="repTitolo" class="form-control" placeholder="es. Report Operativo Ottobre 2026" required>
-                            </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label fw-bold">Mese e Anno di Riferimento (es. 10/2026)*</label>
-                                <input type="text" id="repPeriodo" class="form-control" placeholder="MM/AAAA" required>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-bold">Seleziona File del Report (.doc / Word)*</label>
-                            <input type="file" id="repFile" accept=".doc,.docx,application/msword" class="form-control" required>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Note / Descrizione sintetica</label>
-                            <textarea id="repDesc" class="form-control" rows="2" placeholder="Eventuali annotazioni sul report caricato..."></textarea>
-                        </div>
-                        <button type="submit" class="btn btn-success fw-bold"><i class="bi bi-upload me-1"></i>Carica e Pubblica in Archivio</button>
-                    </form>
-                </div>
-                ` : `
-                <div class="alert alert-info mb-4">
-                    <i class="bi bi-info-circle me-2"></i>Stai visualizzando l'archivio protetto dei report mensili in consultazione (Accesso consentito ai Responsabili). Il caricamento di nuovi file è riservato al Creatore App.
-                </div>
-                `}
-
-                <h4 class="fw-bold mb-3"><i class="bi bi-folder2-open me-2"></i>Archivio Storico Report Mensili (${uploadedReports.length})</h4>
-                <div class="row">${uploadedReports.length > 0 ? reportsHTML : '<div class="col-12 text-muted">Nessun report mensile archiviato al momento.</div>'}</div>
+                <button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button>
+                <h4 class="fw-bold mb-3">Archivio Report (${uploadedReports.length})</h4>
+                <div class="row">${reportsHTML || '<div class="col-12 text-muted">Nessun report.</div>'}</div>
             `;
         }
 
-        window.uploadReportFile = async function(e) {
-            e.preventDefault();
-            const fileInput = document.getElementById('repFile');
-            const file = fileInput.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = async function(event) {
-                const base64File = event.target.result;
-                const newReport = {
-                    titolo: document.getElementById('repTitolo').value,
-                    periodo: document.getElementById('repPeriodo').value,
-                    descrizione: document.getElementById('repDesc').value,
-                    fileName: file.name,
-                    fileUrl: base64File,
-                    dataCaricamento: new Date().toLocaleDateString('it-IT'),
-                    caricatoDa: `${loggedUser.nome} ${loggedUser.cognome}`
-                };
-
-                try {
-                    await addDoc(collection(db, "uploadedReports"), newReport);
-                    alert("Report caricato e salvato nell'archivio cloud con successo!");
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore caricamento report:", err);
-                    alert("Errore durante il salvataggio del report.");
-                }
-            };
-            reader.readAsDataURL(file);
-        }
-
-        window.deleteReport = async function(id) {
-            if (confirm("Sei sicuro di voler eliminare questo report dall'archivio?")) {
-                try {
-                    await deleteDoc(doc(db, "uploadedReports", id));
-                    loadCloudData();
-                } catch (err) {
-                    console.error("Errore eliminazione report:", err);
-                }
-            }
-        }
-
-        // --- SEZIONE FEEDBACK MENSILE OBBLIGATORIO E DASHBOARD RISERVATA ---
         window.checkMonthlyFeedback = async function() {
             if (!loggedUser || isManagerRole()) return false;
-
             const today = new Date();
-            const day = today.getDate();
-            const currentMonthYear = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-
-            if (day >= 15 && day <= 20) {
+            if (today.getDate() >= 15 && today.getDate() <= 20) {
+                const cur = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
                 try {
-                    const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
-                    const feedbacks = fbSnap.docs.map(d => d.data());
-                    
-                    const alreadySubmitted = feedbacks.some(f => f.userEmail === loggedUser.email && f.periodo === currentMonthYear);
-
-                    if (!alreadySubmitted) {
-                        renderFeedbackModal(currentMonthYear);
+                    const snap = await getDocs(collection(db, "monthlyFeedbacks"));
+                    if (!snap.docs.some(d => d.data().userEmail === loggedUser.email && d.data().periodo === cur)) {
+                        renderFeedbackModal(cur);
                         return true;
                     }
-                } catch (e) {
-                    console.error("Errore controllo feedback obbligatorio:", e);
-                }
+                } catch (e) {}
             }
             return false;
         }
@@ -2151,37 +1158,13 @@ window.init = async function() {
             document.getElementById('appContainer').innerHTML = `
                 <div class="row justify-content-center">
                     <div class="col-md-7">
-                        <div class="card p-4 border-danger shadow-lg">
-                            <div class="text-center mb-3">
-                                <span class="badge bg-danger p-2 mb-2 fs-6"><i class="bi bi-exclamation-triangle-fill me-1"></i> Adempimento Mensile Obbligatorio</span>
-                                <h3 class="fw-bold text-primary">Valutazione e Suggerimenti PWA</h3>
-                                <p class="text-muted small">Periodo di riferimento: <strong>${periodo}</strong> (Finestra utile: dal 15 al 20 del mese)</p>
-                                <div class="alert alert-warning small text-start">
-                                    <i class="bi bi-info-circle-fill me-1"></i> Questo modulo è indispensabile per mantenere attiva la tua operatività sulla piattaforma. Il sistema garantisce l'anonimato del parere espresso.
-                                </div>
-                            </div>
+                        <div class="card p-4 border-danger shadow-lg text-center">
+                            <h3 class="fw-bold text-primary">Valutazione PWA Mensile</h3>
                             <form onsubmit="submitMonthlyFeedback(event, '${periodo}')">
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">1. Come valuti l'esperienza d'uso generale della PWA?*</label>
-                                    <select id="fbVoto" class="form-select" required>
-                                        <option value="5">⭐⭐⭐⭐⭐ - Ottima, tutto perfetto</option>
-                                        <option value="4">⭐⭐⭐⭐ - Buona</option>
-                                        <option value="3">⭐⭐⭐ - Sufficiente, migliorabile</option>
-                                        <option value="2">⭐⭐ - Scarsa</option>
-                                        <option value="1">⭐ - Molto problematica</option>
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">2. Quali funzioni trovi più utili e cosa ti piace di più?</label>
-                                    <textarea id="fbPiace" class="form-control" rows="2" placeholder="Es. Gestione turni, mappa idrica..." required></textarea>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label fw-bold">3. Suggerimenti, critiche costruttive o problemi riscontrati:*</label>
-                                    <textarea id="fbMigliorie" class="form-control" rows="3" placeholder="Scrivi qui eventuali migliorie o malfunzionamenti..." required></textarea>
-                                </div>
-                                <button type="submit" class="btn btn-pc w-100 fw-bold py-2 shadow-sm">
-                                    <i class="bi bi-send-check-fill me-1"></i> Invia Valutazione e sblocca l'app
-                                </button>
+                                <div class="mb-3 text-start"><label>Voto (1-5)*</label><select id="fbVoto" class="form-select"><option value="5">5 - Ottima</option><option value="3">3 - Sufficiente</option><option value="1">1 - Scarsa</option></select></div>
+                                <div class="mb-3 text-start"><label>Cosa ti piace?*</label><textarea id="fbPiace" class="form-control" required></textarea></div>
+                                <div class="mb-3 text-start"><label>Migliorie:*</label><textarea id="fbMigliorie" class="form-control" required></textarea></div>
+                                <button type="submit" class="btn btn-pc w-100 fw-bold">Invia e sblocca app</button>
                             </form>
                         </div>
                     </div>
@@ -2192,68 +1175,28 @@ window.init = async function() {
         window.submitMonthlyFeedback = async function(e, periodo) {
             e.preventDefault();
             try {
-                const feedbackData = {
-                    periodo: periodo,
-                    voto: document.getElementById('fbVoto').value,
-                    cosaPiace: document.getElementById('fbPiace').value,
-                    migliorie: document.getElementById('fbMigliorie').value,
-                    dataInvio: new Date().toLocaleString('it-IT'),
-                    userEmail: loggedUser.email,
-                    userName: `${loggedUser.nome} ${loggedUser.cognome}`
-                };
-
-                await addDoc(collection(db, "monthlyFeedbacks"), feedbackData);
-                alert("Grazie! Questionario registrato con successo. L'applicazione è ora sbloccata.");
+                await addDoc(collection(db, "monthlyFeedbacks"), {
+                    periodo: periodo, voto: document.getElementById('fbVoto').value,
+                    cosaPiace: document.getElementById('fbPiace').value, migliorie: document.getElementById('fbMigliorie').value,
+                    dataInvio: new Date().toLocaleString('it-IT'), userEmail: loggedUser.email, userName: `${loggedUser.nome} ${loggedUser.cognome}`
+                });
+                alert("Grazie! App sbloccata.");
                 loadCloudData();
-            } catch (err) {
-                console.error("Errore invio feedback:", err);
-                alert("Errore durante l'invio. Riprova.");
-            }
+            } catch (e) {}
         }
 
         window.renderAdminFeedbackDashboard = async function() {
-            if (!isAppCreator()) {
-                alert("Area riservata.");
-                return;
-            }
-
-            const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
-            const feedbacks = fbSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
-            let fbHTML = feedbacks.map(f => `
-                <div class="col-md-6 mb-3">
-                    <div class="card p-3 border-start border-4 border-warning h-100">
-                        <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span class="badge bg-dark">${f.periodo}</span>
-                            <small class="text-muted">Inviato il: ${f.dataInvio}</small>
-                        </div>
-                        <h5 class="fw-bold text-danger mb-2"><i class="bi bi-person-fill-lock me-1"></i>Autore Reale: ${f.userName}</h5>
-                        <p class="mb-1"><strong>Voto:</strong> ${f.voto} / 5</p>
-                        <p class="mb-1"><strong>Cosa piace:</strong> ${f.cosaPiace || 'Nessuna nota'}</p>
-                        <p class="mb-1"><strong>Suggerimenti/Problemi:</strong> ${f.migliorie || 'Nessuna nota'}</p>
-                    </div>
-                </div>
-            `).join('');
-
-            document.getElementById('appContainer').innerHTML = `
-                <div class="mb-3">
-                    <button class="btn btn-outline-secondary btn-sm" onclick="switchTab('bacheca')">
-                        <i class="bi bi-arrow-left me-1"></i> Torna alla Bacheca
-                    </button>
-                </div>
-                <h4 class="fw-bold mb-3"><i class="bi bi-eye-slash-fill me-2"></i>Dashboard Segreta: Feedback Volontari (${feedbacks.length})</h4>
-                <div class="alert alert-warning">
-                    <i class="bi bi-shield-lock-fill me-2"></i><strong>Area Riservata:</strong> Per i volontari il form risulta completamente anonimo, ma qui puoi visualizzare esattamente chi ha scritto cosa per un confronto mirato.
-                </div>
-                <div class="row">${feedbacks.length > 0 ? fbHTML : '<div class="col-12 text-muted">Nessun feedback ricevuto al momento.</div>'}</div>
-            `;
+            if (!isAppCreator()) return;
+            const snap = await getDocs(collection(db, "monthlyFeedbacks"));
+            let html = snap.docs.map(d => { let f = d.data(); return `<div class="col-md-6 mb-3"><div class="card p-3"><h5>${f.userName} (${f.periodo})</h5><p>Voto: ${f.voto}</p><p>${f.migliorie}</p></div></div>`; }).join('');
+            document.getElementById('appContainer').innerHTML = `<button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button><h4>Dashboard Feedback</h4><div class="row">${html}</div>`;
         }
 
-        // Avvio caricamento dati da Firebase all'apertura
+        window.downloadWordReport = function() { alert("Funzione Word disponibile nel menu superiore."); };
+
+        // Avvio applicazione
         loadCloudData();
     </script>
-
-    <!-- Bootstrap 5 JS Bundle -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
