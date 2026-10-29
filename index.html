@@ -24,7 +24,7 @@
             --pc-accent: #e63946;
         }
         body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding-bottom: 45px; }
-        .bg-pc-header { background: linear-gradient(135deg, #0d3b66 0%, #1d4e89 100%); color: white; z-index: 1030; }
+        .bg-pc-header { background: linear-gradient(135deg, var(--pc-blue) 0%, #1d4e89 100%); color: white; z-index: 1030; }
         .sticky-menu-bar { position: sticky; top: 56px; z-index: 1020; background-color: #f8f9fa; padding-top: 10px; padding-bottom: 10px; }
         .fixed-menu-container { display: flex; flex-wrap: nowrap; overflow-x: auto; white-space: nowrap; gap: 5px; }
         .fixed-menu-container .nav-item { flex: 0 0 auto; }
@@ -38,11 +38,29 @@
         .badge-role { background-color: var(--pc-yellow); color: #333; font-weight: bold; }
         .logo-noe-header { height: 45px; width: auto; margin-right: 12px; }
         .logo-noe-main { height: 140px; width: auto; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto; }
-        .nav-pills .nav-link { cursor: pointer; color: #0d3b66; font-weight: 500; }
-        .nav-pills .nav-link.active { background-color: #0d3b66 !important; color: white !important; }
+        .nav-pills .nav-link { cursor: pointer; color: var(--pc-blue); font-weight: 500; }
+        .nav-pills .nav-link.active { background-color: var(--pc-blue) !important; color: white !important; }
         #map { height: 450px; width: 100%; border-radius: 12px; }
         
-        /* Stile Striscia Blu In Basso per Contatore Online e Rating */
+        /* Stile ottimizzato per cellulari della Navbar */
+        @media (max-width: 768px) {
+            .navbar .container-fluid {
+                flex-direction: column;
+                gap: 6px;
+            }
+            #userInfo {
+                width: 100%;
+                justify-content: center;
+                flex-wrap: wrap;
+                gap: 3px !important;
+            }
+            #userInfo .btn {
+                font-size: 0.75rem !important;
+                padding: 3px 6px !important;
+            }
+        }
+
+        /* Striscia Blu In Basso per Contatore Online e Rating */
         .online-bar {
             position: fixed;
             bottom: 0;
@@ -74,24 +92,22 @@
     </script>
 </head>
 <body>
-<nav class="navbar bg-pc-header sticky-top shadow-sm">
-        <div class="container-fluid">
+    <nav class="navbar bg-pc-header sticky-top shadow-sm py-2">
+        <div class="container-fluid d-flex justify-content-between align-items-center">
             <span class="navbar-brand mb-0 h1 d-flex align-items-center text-white">
                 <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-header" onerror="this.style.display='none'">
                 <div>
-                    <span style="font-size: 1.1rem; font-weight: bold;">N.O.E. - Rieti (Cod. 210)</span>
-                    <div style="font-size: 0.75rem; opacity: 0.9;" class="fw-normal">
-                        C.F. 90041090573 &bull; Numero H24: 3793954151
+                    <span style="font-size: 1rem; font-weight: bold;">N.O.E. - Rieti (Cod. 210)</span>
+                    <div style="font-size: 0.7rem; opacity: 0.9;" class="fw-normal">
+                        C.F. 90041090573 &bull; H24: 3793954151
                     </div>
                 </div>
             </span>
-            <div id="userInfo" class="d-none align-items-center gap-2">
-                <!-- Pulsante Archivio Report (Visibile solo ai Responsabili) -->
+            <div id="userInfo" class="d-none align-items-center gap-1 flex-wrap justify-content-end">
                 <div id="archiveBtnContainer"></div>
-                <!-- Pulsante Genera Word & Feedback (Visibile solo al Responsabile App) -->
-                <div id="creatorReportBtnContainer"></div>
+                <div id="creatorReportBtnContainer" class="d-flex gap-1"></div>
                 <span class="badge badge-role" id="userRoleBadge"></span>
-                <button class="btn btn-outline-light btn-sm" onclick="logout()">Esci</button>
+                <button class="btn btn-outline-light btn-sm py-1 px-2" onclick="logout()">Esci</button>
             </div>
         </div>
     </nav>
@@ -100,7 +116,7 @@
         <!-- Verrà popolato via JavaScript -->
     </div>
 
-    <!-- Barra Fissa In Basso per Volontari Online e Rating Feedback -->
+    <!-- Barra Fissa In Basso -->
     <div id="onlineBar" class="online-bar d-none d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-3">
             <div>
@@ -116,8 +132,7 @@
             N.O.E. Rieti 210 &bull; Sistema Cloud
         </div>
     </div>
-
-    <!-- Leaflet JS per Mappa -->
+<!-- Leaflet JS per Mappa -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <!-- Firebase SDKs & Core Logic -->
@@ -260,6 +275,9 @@
                     uploadedReports = repSnap.docs.map(d => ({ id: d.id, ...d.data() }));
                 } catch(e) { uploadedReports = []; }
 
+                // Applicazione automatica tema personalizzato se salvato nel cloud
+                applyCloudTheme();
+
                 init();
             } catch (err) {
                 console.error("Errore di connessione a Firestore: ", err);
@@ -287,7 +305,6 @@
 
             if (onlineBar) onlineBar.classList.remove('d-none');
 
-            // Calcolo volontari online
             const fiveMinutesAgo = new Date().getTime() - (5 * 60 * 1000);
             const count = users.filter(u => u.lastSeen && u.lastSeen > fiveMinutesAgo).length;
             const finalCount = Math.max(1, count);
@@ -297,7 +314,6 @@
                 countElem.innerText = finalCount;
             }
 
-            // Calcolo media stelle dai feedback inviati
             try {
                 const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
                 const feedbacks = fbSnap.docs.map(d => d.data());
@@ -316,8 +332,7 @@
                 console.error("Errore calcolo media feedback:", e);
             }
         }
-
-        window.init = async function() {
+window.init = async function() {
             if (!loggedUser) {
                 renderLogin();
                 const onlineBar = document.getElementById('onlineBar');
@@ -347,7 +362,7 @@
                 if (isManagerRole()) {
                     archiveContainer.innerHTML = `
                         <button class="btn btn-info btn-sm fw-bold text-white" onclick="switchTab('archivioReport')" title="Archivio Report Mensili Pubblicati">
-                            <i class="bi bi-folder-symlink-fill me-1"></i> Archivio Report
+                            <i class="bi bi-folder-symlink-fill me-1"></i> Archivio
                         </button>
                     `;
                 } else {
@@ -358,10 +373,13 @@
                 if (isAppCreator()) {
                     creatorContainer.innerHTML = `
                         <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="downloadWordReport()" title="Scarica Report Operativo Mensile Word">
-                            <i class="bi bi-file-earmark-word-fill me-1"></i> Report Word (.doc)
+                            <i class="bi bi-file-earmark-word-fill me-1"></i> Word
                         </button>
-                        <button class="btn btn-outline-danger btn-sm fw-bold ms-1" onclick="renderAdminFeedbackDashboard()" title="Dashboard Feedback Riservata">
+                        <button class="btn btn-outline-danger btn-sm fw-bold" onclick="renderAdminFeedbackDashboard()" title="Dashboard Feedback Riservata">
                             <i class="bi bi-eye-slash-fill me-1"></i> Feedback
+                        </button>
+                        <button class="btn btn-outline-dark btn-sm fw-bold" onclick="openThemeCustomizer()" title="Personalizza Colori App">
+                            <i class="bi bi-palette-fill me-1"></i> Colori
                         </button>
                     `;
                 } else {
@@ -369,6 +387,61 @@
                 }
 
                 renderMainView();
+            }
+        }
+
+        // Funzione esclusiva Creatore App per personalizzare e salvare i colori nel Cloud
+        window.openThemeCustomizer = function() {
+            if (!isAppCreator()) return;
+            
+            const currentBlue = getComputedStyle(document.documentElement).getPropertyValue('--pc-blue').trim() || '#0d3b66';
+            const newColor = prompt("Inserisci il codice esadecimale del nuovo colore principale dell'app (es. #0d3b66 per blu, #1b4332 per verde scuro, #3f37c9 per viola):", currentBlue);
+            
+            if (newColor && newColor.startsWith('#')) {
+                saveThemeToCloud(newColor);
+            } else if (newColor !== null) {
+                alert("Formato colore non valido. Usa il formato esadecimale es. #0d3b66");
+            }
+        }
+
+        window.saveThemeToCloud = async function(colorHex) {
+            try {
+                // Salviamo le impostazioni di tema in una collezione dedicata o aggiorniamo un documento globale
+                const settingsRef = doc(db, "appSettings", "themeConfig");
+                // Verifichiamo se esiste, altrimenti lo creiamo
+                await updateDoc(settingsRef, { primaryColor: colorHex }).catch(async () => {
+                    const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
+                    await setDoc(settingsRef, { primaryColor: colorHex });
+                });
+
+                applyThemeColor(colorHex);
+                alert("Tema di colore aggiornato e salvato con successo nel Cloud per tutti gli utenti!");
+            } catch (err) {
+                console.error("Errore salvataggio tema:", err);
+                // Fallback locale immediato se Firestore non è configurato per settings
+                applyThemeColor(colorHex);
+                alert("Colore applicato localmente.");
+            }
+        }
+
+        window.applyThemeColor = function(colorHex) {
+            document.documentElement.style.setProperty('--pc-blue', colorHex);
+            localStorage.setItem('noe_theme_color', colorHex);
+        }
+
+        window.applyCloudTheme = async function() {
+            try {
+                const settingsSnap = await getDocs(collection(db, "appSettings"));
+                const settingDoc = settingsSnap.docs.find(d => d.id === "themeConfig");
+                if (settingDoc && settingDoc.data().primaryColor) {
+                    applyThemeColor(settingDoc.data().primaryColor);
+                } else {
+                    const localColor = localStorage.getItem('noe_theme_color');
+                    if (localColor) applyThemeColor(localColor);
+                }
+            } catch (e) {
+                const localColor = localStorage.getItem('noe_theme_color');
+                if (localColor) applyThemeColor(localColor);
             }
         }
 window.renderLogin = function() {
@@ -501,8 +574,7 @@ window.renderLogin = function() {
             if (onlineBar) onlineBar.classList.add('d-none');
             renderLogin();
         }
-
-        window.switchTab = function(tab) {
+window.switchTab = function(tab) {
             activeTab = tab;
             if (tab === 'bacheca') {
                 markAllAnnouncementsAsRead();
@@ -1352,8 +1424,7 @@ window.renderLogin = function() {
                 }
             }
         }
-
-        // --- SEZIONE DISPONIBILITÀ ---
+// --- SEZIONE DISPONIBILITÀ ---
         window.renderDisponibilita = function() {
             const isAdmin = isSuperAdmin();
 
@@ -1605,8 +1676,7 @@ window.renderLogin = function() {
                 }
             }
         }
-
-        // --- SEZIONE RIFORNIMENTI ---
+// --- SEZIONE RIFORNIMENTI ---
         window.renderRifornimenti = function() {
             const isAdmin = isSuperAdmin();
 
@@ -1981,7 +2051,7 @@ window.renderLogin = function() {
             const currentMonthYear = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
 
             // Controllo finestra temporale: dal 15 al 20 del mese
-            if (day >= 15 && day <= 29) {
+            if (day >= 15 && day <= 20) {
                 try {
                     const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
                     const feedbacks = fbSnap.docs.map(d => d.data());
