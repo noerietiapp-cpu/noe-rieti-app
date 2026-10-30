@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html lang="it">
 <head>
+    <!-- ================================================== -->
+    <!-- PARTE 1: HEAD, META, CSS E CONFIGURAZIONE FIREBASE -->
+    <!-- ================================================== -->
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>N.O.E. - Rieti 210 | Protezione Civile</title>
@@ -8,9 +11,7 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Bootstrap Icons -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
-    <!-- Leaflet CSS (Mappa Interattiva) -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- Configurazione PWA per installazione su Smartphone -->
+    <!-- Configurazione PWA -->
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#0d3b66">
     <meta name="apple-mobile-web-app-capable" content="yes">
@@ -18,11 +19,7 @@
     <meta name="apple-mobile-web-app-title" content="NOE Rieti">
     <link rel="apple-touch-icon" href="logo bianco.png">
     <style>
-        :root {
-            --pc-blue: #0d3b66;
-            --pc-yellow: #f4d35e;
-            --pc-accent: #e63946;
-        }
+        :root { --pc-blue: #0d3b66; --pc-yellow: #f4d35e; --pc-accent: #e63946; }
         body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding-bottom: 45px; }
         .bg-pc-header { background: linear-gradient(135deg, var(--pc-blue) 0%, #1d4e89 100%); color: white; z-index: 1030; }
         .sticky-menu-bar { position: sticky; top: 56px; z-index: 1020; background-color: #f8f9fa; padding-top: 10px; padding-bottom: 10px; }
@@ -40,42 +37,23 @@
         .logo-noe-main { height: 140px; width: auto; margin-bottom: 15px; display: block; margin-left: auto; margin-right: auto; }
         .nav-pills .nav-link { cursor: pointer; color: var(--pc-blue); font-weight: 500; }
         .nav-pills .nav-link.active { background-color: var(--pc-blue) !important; color: white !important; }
-        #map { height: 450px; width: 100%; border-radius: 12px; }
-        
         @media (max-width: 768px) {
             .navbar .container-fluid { flex-direction: column; gap: 6px; }
             #userInfo { width: 100%; justify-content: center; flex-wrap: wrap; gap: 3px !important; }
             #userInfo .btn { font-size: 0.75rem !important; padding: 3px 6px !important; }
         }
-
-        .online-bar {
-            position: fixed; bottom: 0; left: 0; width: 100%;
-            background-color: var(--pc-blue); color: white; font-size: 0.85rem;
-            padding: 6px 15px; z-index: 1040; box-shadow: 0 -2px 8px rgba(0,0,0,0.2);
-        }
-        .online-indicator {
-            width: 9px; height: 9px; background-color: #2ecc71;
-            border-radius: 50%; display: inline-block; margin-right: 6px; box-shadow: 0 0 6px #2ecc71;
-        }
+        .online-bar { position: fixed; bottom: 0; left: 0; width: 100%; background-color: var(--pc-blue); color: white; font-size: 0.85rem; padding: 6px 15px; z-index: 1040; box-shadow: 0 -2px 8px rgba(0,0,0,0.2); }
+        .online-indicator { width: 9px; height: 9px; background-color: #2ecc71; border-radius: 50%; display: inline-block; margin-right: 6px; box-shadow: 0 0 6px #2ecc71; }
     </style>
-    <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('sw.js')
-          .then(() => console.log("Service Worker registrato con successo!"))
-          .catch((err) => console.log("Errore Service Worker: ", err));
-      }
-    </script>
 </head>
 <body>
     <nav class="navbar bg-pc-header sticky-top shadow-sm py-2">
         <div class="container-fluid d-flex justify-content-between align-items-center">
             <span class="navbar-brand mb-0 h1 d-flex align-items-center text-white">
-                <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-header" onerror="this.style.display='none'">
+                <img src="logo bianco.png" alt="Logo" class="logo-noe-header" onerror="this.style.display='none'">
                 <div>
                     <span style="font-size: 1rem; font-weight: bold;">N.O.E. - Rieti (Cod. 210)</span>
-                    <div style="font-size: 0.7rem; opacity: 0.9;" class="fw-normal">
-                        C.F. 90041090573 &bull; H24: 3793954151
-                    </div>
+                    <div style="font-size: 0.7rem; opacity: 0.9;" class="fw-normal">C.F. 90041090573 &bull; H24: 3793954151</div>
                 </div>
             </span>
             <div id="userInfo" class="d-none align-items-center gap-1 flex-wrap justify-content-end">
@@ -86,27 +64,15 @@
             </div>
         </div>
     </nav>
-
     <div class="container my-4" id="appContainer"></div>
-
     <div id="onlineBar" class="online-bar d-none d-flex justify-content-between align-items-center">
         <div class="d-flex align-items-center gap-3">
-            <div>
-                <span class="online-indicator"></span>
-                <span>Volontari online: <strong id="onlineCount">1</strong></span>
-            </div>
+            <div><span class="online-indicator"></span><span>Volontari online: <strong id="onlineCount">1</strong></span></div>
             <div class="border-start border-light opacity-50 ps-3" style="height: 15px;"></div>
-            <div id="feedbackRatingContainer">
-                <span id="feedbackRatingText" class="fw-bold text-warning"><i class="bi bi-star-fill me-1"></i> Valutazione PWA: -- / 5</span>
-            </div>
+            <div id="feedbackRatingContainer"><span id="feedbackRatingText" class="fw-bold text-warning"><i class="bi bi-star-fill me-1"></i> Valutazione PWA: -- / 5</span></div>
         </div>
         <div class="small opacity-75 d-none d-sm-block">N.O.E. Rieti 210 &bull; Sistema Cloud</div>
     </div>
-
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-
-    <!-- Firebase SDKs & Core Logic -->
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
         import { getFirestore, collection, getDocs, addDoc, updateDoc, deleteDoc, doc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
@@ -119,29 +85,22 @@
             messagingSenderId: "681497158437",
             appId: "1:681497158437:web:38b313c27c55c8afe7e00c"
         };
-
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
 
-        // --- SISTEMA DI CACHE INTELLIGENTE LOCALE ---
         async function getCachedData(collectionName, maxAgeMinutes = 30) {
             const cacheKey = 'noe_cache_' + collectionName;
             const timeKey = 'noe_time_' + collectionName;
-            
             const cachedData = localStorage.getItem(cacheKey);
             const cachedTime = localStorage.getItem(timeKey);
             const now = new Date().getTime();
-
             if (cachedData && cachedTime && (now - cachedTime < maxAgeMinutes * 60 * 1000)) {
                 return JSON.parse(cachedData);
             }
-
             const querySnapshot = await getDocs(collection(db, collectionName));
             const dataList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-
             localStorage.setItem(cacheKey, JSON.stringify(dataList));
             localStorage.setItem(timeKey, now);
-
             return dataList;
         }
 
@@ -149,46 +108,21 @@
             localStorage.removeItem('noe_cache_' + collectionName);
             localStorage.removeItem('noe_time_' + collectionName);
         }
-const ROLES_SINGLE = [
-            "Presidente (Legale Rappresentante)", "Vice Presidente", "Segreteria",
-            "Tesoriere", "Responsabile Mezzi", "Responsabile AIB", "Responsabile App"
-        ];
-
+// --------------------------------------------------
+        // PARTE 2: VARIABILI GLOBALI, UTILITY E CLOUD SYNC
+        // --------------------------------------------------
+        const ROLES_SINGLE = ["Presidente (Legale Rappresentante)", "Vice Presidente", "Segreteria", "Tesoriere", "Responsabile Mezzi", "Responsabile AIB", "Responsabile App"];
         const ROLES_MANAGERS = [...ROLES_SINGLE];
-
-        const SERVICE_TYPES = [
-            "Turno in Caserma", "Pattugliamento AIB", "Intervento AIB",
-            "Pattugliamento Idrogeologico", "Intervento Idrogeologico",
-            "Supporto alla Popolazione", "Manutenzione Caserma", "Manutenzione Mezzi"
-        ];
-
+        const SERVICE_TYPES = ["Turno in Caserma", "Pattugliamento AIB", "Intervento AIB", "Pattugliamento Idrogeologico", "Intervento Idrogeologico", "Supporto alla Popolazione", "Manutenzione Caserma", "Manutenzione Mezzi"];
         const OPERATIVE_ROLES = ["Caposquadra", "Autista", "Operatore", "Soccorritore", "4° Uomo (Affiancamento)"];
 
-        let users = [];
-        let loggedUser = JSON.parse(localStorage.getItem('noe_logged')) || null;
-        let vehicles = [];
-        let shifts = [];
-        let historyShifts = [];
-        let availabilities = [];
-        let waterPoints = [];
-        let refuels = [];
-        let announcements = [];
-        let uploadedReports = [];
-
+        let users = [], loggedUser = JSON.parse(localStorage.getItem('noe_logged')) || null;
+        let vehicles = [], shifts = [], historyShifts = [], availabilities = [], waterPoints = [], refuels = [], announcements = [], uploadedReports = [];
         let activeTab = 'bacheca';
-        let leafletMap = null;
 
-        function isSuperAdmin() {
-            return loggedUser && (loggedUser.ruolo === "Responsabile App" || loggedUser.ruolo === "Responsabile AIB");
-        }
-
-        function isAppCreator() {
-            return loggedUser && loggedUser.ruolo === "Responsabile App";
-        }
-
-        function isManagerRole() {
-            return loggedUser && ROLES_MANAGERS.includes(loggedUser.ruolo);
-        }
+        function isSuperAdmin() { return loggedUser && (loggedUser.ruolo === "Responsabile App" || loggedUser.ruolo === "Responsabile AIB"); }
+        function isAppCreator() { return loggedUser && loggedUser.ruolo === "Responsabile App"; }
+        function isManagerRole() { return loggedUser && ROLES_MANAGERS.includes(loggedUser.ruolo); }
 
         function compressImage(file, maxWidth = 800, quality = 0.7) {
             return new Promise((resolve) => {
@@ -197,16 +131,9 @@ const ROLES_SINGLE = [
                     const img = new Image();
                     img.onload = function () {
                         const canvas = document.createElement('canvas');
-                        let width = img.width;
-                        let height = img.height;
-
-                        if (width > maxWidth) {
-                            height = Math.round((height * maxWidth) / width);
-                            width = maxWidth;
-                        }
-
-                        canvas.width = width;
-                        canvas.height = height;
+                        let width = img.width, height = img.height;
+                        if (width > maxWidth) { height = Math.round((height * maxWidth) / width); width = maxWidth; }
+                        canvas.width = width; canvas.height = height;
                         const ctx = canvas.getContext('2d');
                         ctx.drawImage(img, 0, 0, width, height);
                         resolve(canvas.toDataURL('image/jpeg', quality));
@@ -227,13 +154,10 @@ const ROLES_SINGLE = [
 
                 const shiftSnap = await getDocs(collection(db, "shifts"));
                 shifts = shiftSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
                 const histSnap = await getDocs(collection(db, "historyShifts"));
                 historyShifts = histSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
                 const dispSnap = await getDocs(collection(db, "availabilities"));
                 availabilities = dispSnap.docs.map(d => ({ id: d.id, ...d.data() }));
-
                 try {
                     const repSnap = await getDocs(collection(db, "uploadedReports"));
                     uploadedReports = repSnap.docs.map(d => ({ id: d.id, ...d.data() }));
@@ -242,61 +166,53 @@ const ROLES_SINGLE = [
                 applyCloudTheme();
                 init();
             } catch (err) {
-                console.error("Errore di connessione a Firestore: ", err);
-                alert("Errore di connessione al database cloud. Verifica la connessione.");
+                console.error("Errore Firestore:", err);
             }
         };
 
         window.updatePresence = async function() {
             if (!loggedUser || !loggedUser.id) return;
-            try {
-                await updateDoc(doc(db, "users", loggedUser.id), { lastSeen: new Date().getTime() });
-            } catch (e) { console.error("Errore presenza:", e); }
+            try { await updateDoc(doc(db, "users", loggedUser.id), { lastSeen: new Date().getTime() }); } catch (e) {}
         }
 
         window.renderOnlineCounter = async function() {
             const onlineBar = document.getElementById('onlineBar');
             if (!loggedUser) { if (onlineBar) onlineBar.classList.add('d-none'); return; }
             if (onlineBar) onlineBar.classList.remove('d-none');
-
-            const fiveMinutesAgo = new Date().getTime() - (5 * 60 * 1000);
-            const count = users.filter(u => u.lastSeen && u.lastSeen > fiveMinutesAgo).length;
+            const fiveMins = new Date().getTime() - (5 * 60 * 1000);
+            const count = users.filter(u => u.lastSeen && u.lastSeen > fiveMins).length;
             const countElem = document.getElementById('onlineCount');
             if (countElem) countElem.innerText = Math.max(1, count);
-
             try {
                 const fbSnap = await getDocs(collection(db, "monthlyFeedbacks"));
-                const feedbacks = fbSnap.docs.map(d => d.data());
+                const fbs = fbSnap.docs.map(d => d.data());
                 const ratingElem = document.getElementById('feedbackRatingText');
-                if (ratingElem) {
-                    if (feedbacks.length > 0) {
-                        const sum = feedbacks.reduce((acc, f) => acc + (parseFloat(f.voto) || 0), 0);
-                        ratingElem.innerHTML = `<i class="bi bi-star-fill me-1 text-warning"></i> Valutazione PWA: <strong>${(sum / feedbacks.length).toFixed(1)}</strong> / 5 ⭐ (${feedbacks.length})`;
-                    } else {
-                        ratingElem.innerHTML = `<i class="bi bi-star me-1 text-warning"></i> Valutazione PWA: <strong>--</strong> / 5`;
-                    }
+                if (ratingElem && fbs.length > 0) {
+                    const sum = fbs.reduce((acc, f) => acc + (parseFloat(f.voto) || 0), 0);
+                    ratingElem.innerHTML = `<i class="bi bi-star-fill me-1 text-warning"></i> Valutazione PWA: <strong>${(sum / fbs.length).toFixed(1)}</strong> / 5 ⭐ (${fbs.length})`;
                 }
-            } catch (e) { console.error("Errore feedback:", e); }
+            } catch (e) {}
         }
-window.openThemeCustomizer = function() {
+// --------------------------------------------------
+        // PARTE 3: TEMI, LOGIN, REGISTRAZIONE E INIT
+        // --------------------------------------------------
+        window.openThemeCustomizer = function() {
             if (!isAppCreator()) return;
-            const currentBlue = getComputedStyle(document.documentElement).getPropertyValue('--pc-blue').trim() || '#0d3b66';
-            const newColor = prompt("Inserisci il codice esadecimale del nuovo colore principale dell'app:", currentBlue);
-            if (newColor && newColor.startsWith('#')) saveThemeToCloud(newColor);
+            const cur = getComputedStyle(document.documentElement).getPropertyValue('--pc-blue').trim() || '#0d3b66';
+            const nc = prompt("Colore esadecimale principale (es. #0d3b66):", cur);
+            if (nc && nc.startsWith('#')) saveThemeToCloud(nc);
         }
 
         window.saveThemeToCloud = async function(colorHex) {
             try {
-                const settingsRef = doc(db, "appSettings", "themeConfig");
-                await updateDoc(settingsRef, { primaryColor: colorHex }).catch(async () => {
+                const ref = doc(db, "appSettings", "themeConfig");
+                await updateDoc(ref, { primaryColor: colorHex }).catch(async () => {
                     const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js");
-                    await setDoc(settingsRef, { primaryColor: colorHex });
+                    await setDoc(ref, { primaryColor: colorHex });
                 });
                 applyThemeColor(colorHex);
-                alert("Tema aggiornato con successo!");
-            } catch (err) {
-                applyThemeColor(colorHex);
-            }
+                alert("Tema aggiornato!");
+            } catch (err) { applyThemeColor(colorHex); }
         }
 
         window.applyThemeColor = function(colorHex) {
@@ -306,52 +222,35 @@ window.openThemeCustomizer = function() {
 
         window.applyCloudTheme = async function() {
             try {
-                const settingsSnap = await getDocs(collection(db, "appSettings"));
-                const settingDoc = settingsSnap.docs.find(d => d.id === "themeConfig");
-                if (settingDoc && settingDoc.data().primaryColor) {
-                    applyThemeColor(settingDoc.data().primaryColor);
-                } else {
-                    const localColor = localStorage.getItem('noe_theme_color');
-                    if (localColor) applyThemeColor(localColor);
-                }
-            } catch (e) {
-                const localColor = localStorage.getItem('noe_theme_color');
-                if (localColor) applyThemeColor(localColor);
-            }
+                const snap = await getDocs(collection(db, "appSettings"));
+                const sd = snap.docs.find(d => d.id === "themeConfig");
+                if (sd && sd.data().primaryColor) applyThemeColor(sd.data().primaryColor);
+                else { const lc = localStorage.getItem('noe_theme_color'); if (lc) applyThemeColor(lc); }
+            } catch (e) { const lc = localStorage.getItem('noe_theme_color'); if (lc) applyThemeColor(lc); }
         }
 
         window.init = async function() {
             if (!loggedUser) {
                 renderLogin();
-                const onlineBar = document.getElementById('onlineBar');
-                if (onlineBar) onlineBar.classList.add('d-none');
+                const ob = document.getElementById('onlineBar');
+                if (ob) ob.classList.add('d-none');
             } else {
                 document.getElementById('userInfo').classList.remove('d-none');
                 document.getElementById('userInfo').classList.add('d-flex');
                 document.getElementById('userRoleBadge').innerText = loggedUser.ruolo;
-
                 updatePresence();
                 renderOnlineCounter();
-
                 if (!window.presenceInterval) {
-                    window.presenceInterval = setInterval(() => {
-                        updatePresence();
-                        loadCloudData();
-                    }, 60000);
+                    window.presenceInterval = setInterval(() => { updatePresence(); loadCloudData(); }, 60000);
                 }
-
                 const isBlocked = await checkMonthlyFeedback();
                 if (isBlocked) return;
 
-                const archiveContainer = document.getElementById('archiveBtnContainer');
-                archiveContainer.innerHTML = isManagerRole() ? `
-                    <button class="btn btn-info btn-sm fw-bold text-white" onclick="switchTab('archivioReport')">
-                        <i class="bi bi-folder-symlink-fill me-1"></i> Archivio
-                    </button>
+                document.getElementById('archiveBtnContainer').innerHTML = isManagerRole() ? `
+                    <button class="btn btn-info btn-sm fw-bold text-white" onclick="switchTab('archivioReport')"><i class="bi bi-folder-symlink-fill me-1"></i> Archivio</button>
                 ` : '';
 
-                const creatorContainer = document.getElementById('creatorReportBtnContainer');
-                creatorContainer.innerHTML = isAppCreator() ? `
+                document.getElementById('creatorReportBtnContainer').innerHTML = isAppCreator() ? `
                     <button class="btn btn-warning btn-sm fw-bold text-dark" onclick="downloadWordReport()"><i class="bi bi-file-earmark-word-fill me-1"></i> Word</button>
                     <button class="btn btn-outline-danger btn-sm fw-bold" onclick="renderAdminFeedbackDashboard()"><i class="bi bi-eye-slash-fill me-1"></i> Feedback</button>
                     <button class="btn btn-outline-dark btn-sm fw-bold" onclick="openThemeCustomizer()"><i class="bi bi-palette-fill me-1"></i> Colori</button>
@@ -363,88 +262,62 @@ window.openThemeCustomizer = function() {
 
         window.renderLogin = function() {
             document.getElementById('appContainer').innerHTML = `
-                <div class="row justify-content-center">
-                    <div class="col-md-5">
-                        <div class="card p-4 text-center">
-                            <img src="logo bianco.png" alt="Logo NOE Rieti" class="logo-noe-main" onerror="this.style.display='none'">
-                            <h3 class="mt-2 mb-1 text-primary fw-bold">N.O.E. - Rieti 210</h3>
-                            <p class="text-muted mb-1">Nucleo Operativo Emergenza - Gestione Cloud</p>
-                            <form onsubmit="handleLogin(event)">
-                                <div class="mb-3 text-start"><label class="form-label">Email o Codice Fiscale</label><input type="text" id="loginId" class="form-control" required></div>
-                                <div class="mb-3 text-start"><label class="form-label">Password</label><input type="password" id="loginPass" class="form-control" required></div>
-                                <button type="submit" class="btn btn-pc w-100 mb-3 fw-bold">Accedi</button>
-                            </form>
-                            <hr><button class="btn btn-outline-secondary w-100" onclick="renderRegister()">Non hai un account? Registrati</button>
-                        </div>
-                    </div>
-                </div>
+                <div class="row justify-content-center"><div class="col-md-5"><div class="card p-4 text-center">
+                    <img src="logo bianco.png" alt="Logo" class="logo-noe-main" onerror="this.style.display='none'">
+                    <h3 class="mt-2 mb-1 text-primary fw-bold">N.O.E. - Rieti 210</h3>
+                    <p class="text-muted mb-4">Nucleo Operativo Emergenza - Cloud</p>
+                    <form onsubmit="handleLogin(event)">
+                        <div class="mb-3 text-start"><label class="form-label">Email o Codice Fiscale</label><input type="text" id="loginId" class="form-control" required></div>
+                        <div class="mb-3 text-start"><label class="form-label">Password</label><input type="password" id="loginPass" class="form-control" required></div>
+                        <button type="submit" class="btn btn-pc w-100 mb-3 fw-bold">Accedi</button>
+                    </form>
+                    <hr><button class="btn btn-outline-secondary w-100" onclick="renderRegister()">Registrati</button>
+                </div></div></div>
             `;
         }
 
         window.renderRegister = function() {
-            let optionsRoles = `<option value="Volontario">Volontario</option>`;
+            let opts = `<option value="Volontario">Volontario</option>`;
             ROLES_SINGLE.forEach(r => {
                 const taken = users.some(u => u.ruolo === r);
-                optionsRoles += `<option value="${r}" ${taken ? 'disabled' : ''}>${r} ${taken ? '(Occupato)' : ''}</option>`;
+                opts += `<option value="${r}" ${taken ? 'disabled' : ''}>${r} ${taken ? '(Occupato)' : ''}</option>`;
             });
-
             document.getElementById('appContainer').innerHTML = `
-                <div class="row justify-content-center">
-                    <div class="col-md-7">
-                        <div class="card p-4">
-                            <h4 class="mb-3 text-primary fw-bold text-center">Registrazione Volontario</h4>
-                            <form onsubmit="handleRegister(event)">
-                                <div class="mb-3"><label class="form-label">Foto Profilo (Obbligatoria)*</label><input type="file" id="regFoto" accept="image/*" class="form-control" required></div>
-                                <div class="row">
-                                    <div class="col-md-6 mb-3"><label>Nome*</label><input type="text" id="regNome" class="form-control" required></div>
-                                    <div class="col-md-6 mb-3"><label>Cognome*</label><input type="text" id="regCognome" class="form-control" required></div>
-                                </div>
-                                <div class="mb-3"><label>Ruolo Richiesto*</label><select id="regRuolo" class="form-select" required>${optionsRoles}</select></div>
-                                <div class="row">
-                                    <div class="col-md-6 mb-3"><label>Telefono*</label><input type="tel" id="regTel" class="form-control" required></div>
-                                    <div class="col-md-6 mb-3"><label>Email*</label><input type="email" id="regEmail" class="form-control" required></div>
-                                </div>
-                                <div class="row">
-                                    <div class="col-md-6 mb-3"><label>Codice Fiscale*</label><input type="text" id="regCF" class="form-control" required></div>
-                                    <div class="col-md-3 mb-3"><label>Gruppo Sanguigno</label><input type="text" id="regSangue" class="form-control" placeholder="es. 0+"></div>
-                                    <div class="col-md-3 mb-3"><label>Taglia</label><input type="text" id="regTaglia" class="form-control" placeholder="es. L"></div>
-                                </div>
-                                <div class="mb-3"><label>Password*</label><input type="password" id="regPass" class="form-control" required></div>
-                                <button type="submit" class="btn btn-success w-100 fw-bold">Completa Registrazione</button>
-                                <button type="button" class="btn btn-link w-100 mt-2 text-decoration-none" onclick="renderLogin()">Torna al Login</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
+                <div class="row justify-content-center"><div class="col-md-7"><div class="card p-4">
+                    <h4 class="mb-3 text-primary fw-bold text-center">Registrazione Volontario</h4>
+                    <form onsubmit="handleRegister(event)">
+                        <div class="mb-3"><label class="form-label">Foto Profilo*</label><input type="file" id="regFoto" accept="image/*" class="form-control" required></div>
+                        <div class="row"><div class="col-md-6 mb-3"><label>Nome*</label><input type="text" id="regNome" class="form-control" required></div><div class="col-md-6 mb-3"><label>Cognome*</label><input type="text" id="regCognome" class="form-control" required></div></div>
+                        <div class="mb-3"><label>Ruolo*</label><select id="regRuolo" class="form-select" required>${opts}</select></div>
+                        <div class="row"><div class="col-md-6 mb-3"><label>Tel*</label><input type="tel" id="regTel" class="form-control" required></div><div class="col-md-6 mb-3"><label>Email*</label><input type="email" id="regEmail" class="form-control" required></div></div>
+                        <div class="row"><div class="col-md-6 mb-3"><label>Codice Fiscale*</label><input type="text" id="regCF" class="form-control" required></div><div class="col-md-3 mb-3"><label>Sangue</label><input type="text" id="regSangue" class="form-control"></div><div class="col-md-3 mb-3"><label>Taglia</label><input type="text" id="regTaglia" class="form-control"></div></div>
+                        <div class="mb-3"><label>Password*</label><input type="password" id="regPass" class="form-control" required></div>
+                        <button type="submit" class="btn btn-success w-100 fw-bold">Completa Registrazione</button>
+                        <button type="button" class="btn btn-link w-100 mt-2" onclick="renderLogin()">Torna al Login</button>
+                    </form>
+                </div></div></div>
             `;
         }
-
+// --------------------------------------------------
+        // PARTE 4: REGISTRAZIONE, LOGIN E BACHECA (CACHE PULITA)
+        // --------------------------------------------------
         window.handleRegister = async function(e) {
             e.preventDefault();
-            const fotoFile = document.getElementById('regFoto').files[0];
-            if (!fotoFile) return;
-
+            const f = document.getElementById('regFoto').files[0];
+            if (!f) return;
             try {
-                const compressedDataUrl = await compressImage(fotoFile, 500, 0.7);
-                const newUser = {
-                    nome: document.getElementById('regNome').value,
-                    cognome: document.getElementById('regCognome').value,
-                    ruolo: document.getElementById('regRuolo').value,
-                    tel: document.getElementById('regTel').value,
-                    email: document.getElementById('regEmail').value,
-                    cf: document.getElementById('regCF').value,
-                    sangue: document.getElementById('regSangue').value,
-                    taglia: document.getElementById('regTaglia').value,
-                    corsi: "",
-                    pass: document.getElementById('regPass').value,
-                    foto: compressedDataUrl
-                };
-
-                await addDoc(collection(db, "users"), newUser);
-                invalidateCache('users'); // PULIZIA AUTOMATICA CACHE UTENTI
+                const foto = await compressImage(f, 500, 0.7);
+                await addDoc(collection(db, "users"), {
+                    nome: document.getElementById('regNome').value, cognome: document.getElementById('regCognome').value,
+                    ruolo: document.getElementById('regRuolo').value, tel: document.getElementById('regTel').value,
+                    email: document.getElementById('regEmail').value, cf: document.getElementById('regCF').value,
+                    sangue: document.getElementById('regSangue').value, taglia: document.getElementById('regTaglia').value,
+                    corsi: "", pass: document.getElementById('regPass').value, foto: foto
+                });
+                invalidateCache('users');
                 alert('Registrazione completata!');
                 loadCloudData();
-            } catch (err) { console.error("Errore:", err); }
+            } catch (err) {}
         }
 
         window.handleLogin = function(e) {
@@ -452,28 +325,19 @@ window.openThemeCustomizer = function() {
             const id = document.getElementById('loginId').value.trim().toLowerCase();
             const pass = document.getElementById('loginPass').value;
             const found = users.find(u => (u.email.toLowerCase() === id || u.cf.toLowerCase() === id) && u.pass === pass);
-            if (found) {
-                loggedUser = found;
-                localStorage.setItem('noe_logged', JSON.stringify(loggedUser));
-                init();
-            } else { alert('Credenziali non valide!'); }
+            if (found) { loggedUser = found; localStorage.setItem('noe_logged', JSON.stringify(loggedUser)); init(); }
+            else { alert('Credenziali non valide!'); }
         }
 
         window.logout = function() {
             if (window.presenceInterval) { clearInterval(window.presenceInterval); window.presenceInterval = null; }
-            localStorage.removeItem('noe_logged');
-            loggedUser = null;
+            localStorage.removeItem('noe_logged'); loggedUser = null;
             document.getElementById('userInfo').classList.add('d-none');
-            const onlineBar = document.getElementById('onlineBar');
-            if (onlineBar) onlineBar.classList.add('d-none');
+            const ob = document.getElementById('onlineBar'); if (ob) ob.classList.add('d-none');
             renderLogin();
         }
 
-        window.switchTab = function(tab) {
-            activeTab = tab;
-            if (tab === 'bacheca') markAllAnnouncementsAsRead();
-            renderMainView();
-        }
+        window.switchTab = function(tab) { activeTab = tab; if (tab === 'bacheca') markAllAnnouncementsAsRead(); renderMainView(); }
 
         window.markAllAnnouncementsAsRead = async function() {
             const userName = `${loggedUser.nome} ${loggedUser.cognome}`;
@@ -481,31 +345,22 @@ window.openThemeCustomizer = function() {
                 let letti = ann.lettiDa || [];
                 if (!letti.some(l => l.nome === userName)) {
                     try {
-                        await updateDoc(doc(db, "announcements", ann.id), {
-                            lettiDa: arrayUnion({ nome: userName, dataOra: new Date().toLocaleString('it-IT') })
-                        });
+                        await updateDoc(doc(db, "announcements", ann.id), { lettiDa: arrayUnion({ nome: userName, dataOra: new Date().toLocaleString('it-IT') }) });
                         invalidateCache('announcements');
-                    } catch (err) { console.error(err); }
+                    } catch (err) {}
                 }
             }
         }
-window.renderMainView = function() {
+// --------------------------------------------------
+        // PARTE 5: RENDER PRINCIPALE E ANAGRAFICA VOLONTARI
+        // --------------------------------------------------
+        window.renderMainView = function() {
             const userName = `${loggedUser.nome} ${loggedUser.cognome}`;
-            let unreadCount = announcements.filter(ann => {
-                let letti = ann.lettiDa || [];
-                return !letti.some(l => l.nome === userName);
-            }).length;
-
+            let unreadCount = announcements.filter(ann => !(ann.lettiDa || []).some(l => l.nome === userName)).length;
             let bachecaBadge = unreadCount > 0 ? `<span class="badge bg-danger ms-1 rounded-pill">${unreadCount}</span>` : '';
 
             document.getElementById('appContainer').innerHTML = `
-                <div class="row text-center mb-2">
-                    <div class="col-md-12">
-                        <h2 class="fw-bold mb-1">Benvenuto, ${loggedUser.nome} ${loggedUser.cognome}</h2>
-                        <p class="text-muted">Ruolo Attivo: <strong>${loggedUser.ruolo}</strong></p>
-                    </div>
-                </div>
-
+                <div class="row text-center mb-2"><div class="col-md-12"><h2 class="fw-bold mb-1">Benvenuto, ${loggedUser.nome} ${loggedUser.cognome}</h2><p class="text-muted">Ruolo Attivo: <strong>${loggedUser.ruolo}</strong></p></div></div>
                 <div class="sticky-menu-bar shadow-sm rounded mb-4">
                     <ul class="nav nav-pills fixed-menu-container bg-white p-2 rounded border">
                         <li class="nav-item"><a class="nav-link ${activeTab === 'bacheca' ? 'active' : ''}" onclick="switchTab('bacheca')"><i class="bi bi-megaphone-fill me-1"></i> Bacheca ${bachecaBadge}</a></li>
@@ -515,12 +370,11 @@ window.renderMainView = function() {
                         <li class="nav-item"><a class="nav-link ${activeTab === 'storico' ? 'active' : ''}" onclick="switchTab('storico')"><i class="bi bi-clock-history me-1"></i> Storico</a></li>
                         <li class="nav-item"><a class="nav-link ${activeTab === 'mezzi' ? 'active' : ''}" onclick="switchTab('mezzi')"><i class="bi bi-truck me-1"></i> Mezzi</a></li>
                         <li class="nav-item"><a class="nav-link ${activeTab === 'rifornimenti' ? 'active' : ''}" onclick="switchTab('rifornimenti')"><i class="bi bi-fuel-pump me-1"></i> Rifornimenti</a></li>
-                        <li class="nav-item"><a class="nav-link ${activeTab === 'mappa' ? 'active' : ''}" onclick="switchTab('mappa')"><i class="bi bi-geo-alt-fill me-1"></i> Mappa</a></li>
+                        <li class="nav-item"><a class="nav-link ${activeTab === 'luoghi' ? 'active' : ''}" onclick="switchTab('luoghi')"><i class="bi bi-geo-alt-fill me-1"></i> Punti GPS</a></li>
                     </ul>
                 </div>
                 <div id="tabContent"></div>
             `;
-
             if (activeTab === 'bacheca') { renderBacheca(); markAllAnnouncementsAsRead(); }
             else if (activeTab === 'anagrafica') renderAnagrafica();
             else if (activeTab === 'turni') renderTurni();
@@ -528,179 +382,92 @@ window.renderMainView = function() {
             else if (activeTab === 'storico') renderStorico();
             else if (activeTab === 'mezzi') renderMezzi();
             else if (activeTab === 'rifornimenti') renderRifornimenti();
-            else if (activeTab === 'mappa') renderMappa();
+            else if (activeTab === 'luoghi') renderLuoghi();
             else if (activeTab === 'archivioReport') renderArchivioReport();
-            
             renderOnlineCounter();
         }
 
         window.renderBacheca = function() {
-            const canPost = isManagerRole();
-            const isAdmin = isSuperAdmin();
-
-            let annHTML = announcements.map((ann) => {
-                let lettiList = ann.lettiDa || [];
-                let lettiHtml = `<details class="mt-2 text-muted small"><summary style="cursor: pointer;">Visualizzazioni (${lettiList.length})</summary><ul class="ps-3 mb-0 mt-1">${lettiList.map(l => `<li>${l.nome} - <em>${l.dataOra}</em></li>`).join('')}</ul></details>`;
-                return `
-                    <div class="col-md-12 mb-3">
-                        <div class="card p-3 border-start border-4 border-warning shadow-sm">
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h5 class="fw-bold text-primary mb-0">${ann.titolo}</h5>
-                                <small class="text-muted">${ann.data}</small>
-                            </div>
-                            <p class="mb-2 text-dark" style="white-space: pre-line;">${ann.testo}</p>
-                            ${lettiHtml}
-                            <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-2">
-                                <small class="text-secondary">Pubblicato da: <strong>${ann.autore}</strong></small>
-                                ${isAdmin ? `<button class="btn btn-sm btn-outline-danger" onclick="deleteAnnouncement('${ann.id}')"><i class="bi bi-trash"></i> Elimina</button>` : ''}
-                            </div>
-                        </div>
+            const canPost = isManagerRole(), isAdmin = isSuperAdmin();
+            let annHTML = announcements.map(ann => `
+                <div class="col-md-12 mb-3"><div class="card p-3 border-start border-4 border-warning shadow-sm">
+                    <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="fw-bold text-primary mb-0">${ann.titolo}</h5><small class="text-muted">${ann.data}</small></div>
+                    <p class="mb-2 text-dark" style="white-space: pre-line;">${ann.testo}</p>
+                    <div class="d-flex justify-content-between align-items-center border-top pt-2 mt-2">
+                        <small class="text-secondary">Autore: <strong>${ann.autore}</strong></small>
+                        ${isAdmin ? `<button class="btn btn-sm btn-outline-danger" onclick="deleteAnnouncement('${ann.id}')">Elimina</button>` : ''}
                     </div>
-                `;
-            }).join('');
+                </div></div>
+            `).join('');
 
             document.getElementById('tabContent').innerHTML = `
                 ${canPost ? `
                 <div class="card p-4 mb-4 bg-light border">
-                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-megaphone me-2"></i>Pubblica Nuovo Avviso</h4>
+                    <h4 class="fw-bold text-primary mb-3"><i class="bi bi-megaphone me-2"></i>Pubblica Avviso</h4>
                     <form onsubmit="addAnnouncement(event)">
                         <div class="mb-3"><label class="form-label fw-bold">Titolo*</label><input type="text" id="annTitolo" class="form-control" required></div>
                         <div class="mb-3"><label class="form-label fw-bold">Testo*</label><textarea id="annTesto" class="form-control" rows="3" required></textarea></div>
-                        <button type="submit" class="btn btn-warning fw-bold text-dark"><i class="bi bi-send me-1"></i>Pubblica</button>
+                        <button type="submit" class="btn btn-warning fw-bold text-dark">Pubblica</button>
                     </form>
-                </div>
-                ` : ''}
+                </div>` : ''}
                 <h4 class="fw-bold mb-3">Comunicati Ufficiali (${announcements.length})</h4>
-                <div class="row">${announcements.length > 0 ? annHTML : '<div class="col-12 text-muted">Nessun avviso presente.</div>'}</div>
+                <div class="row">${annHTML || '<div class="col-12 text-muted">Nessun avviso.</div>'}</div>
             `;
         }
 
         window.renderAnagrafica = function() {
             const isAdmin = isSuperAdmin();
-            let usersListHTML = users.map((u, index) => {
-                let adminActions = isAdmin ? `
-                    <div class="mt-2 pt-2 border-top bg-light p-2 rounded">
-                        <label class="small fw-bold text-danger mb-1">Modifica Ruolo:</label>
-                        <select class="form-select form-select-sm mb-2" onchange="changeUserRole('${u.id}', this.value)">
-                            <option value="Volontario" ${u.ruolo === 'Volontario' ? 'selected' : ''}>Volontario</option>
-                            ${ROLES_SINGLE.map(r => `<option value="${r}" ${u.ruolo === r ? 'selected' : ''}>${r}</option>`).join('')}
-                        </select>
-                        <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteUser('${u.id}')"><i class="bi bi-trash me-1"></i>Elimina</button>
+            let html = users.map((u, i) => `
+                <div class="col-md-6 mb-3"><div class="card p-3 h-100">
+                    <div class="d-flex align-items-center mb-2">
+                        <img src="${u.foto}" class="avatar-lg me-3" alt="Foto">
+                        <div><h5 class="mb-0 fw-bold">${u.nome} ${u.cognome}</h5><span class="badge badge-role mt-1">${u.ruolo}</span></div>
                     </div>
-                ` : '';
-
-                return `
-                    <div class="col-md-6 mb-3">
-                        <div class="card p-3 h-100">
-                            <div class="d-flex align-items-center mb-2">
-                                <img src="${u.foto}" class="avatar-lg me-3" alt="Foto">
-                                <div>
-                                    <h5 class="mb-0 fw-bold">${u.nome} ${u.cognome}</h5>
-                                    <span class="badge badge-role mt-1">${u.ruolo}</span>
-                                </div>
-                            </div>
-                            <small class="text-muted"><strong>Tel:</strong> ${u.tel} | <strong>Email:</strong> ${u.email}</small>
-                            <small class="text-muted"><strong>CF:</strong> ${u.cf} | <strong>Sangue:</strong> ${u.sangue || '-'}</small>
-                            <div class="mt-2 pt-2 border-top">
-                                <strong>Corsi:</strong>
-                                ${isAdmin ? `
-                                    <div class="input-group input-group-sm mt-1">
-                                        <input type="text" id="courseInput_${index}" class="form-control" value="${u.corsi || ''}">
-                                        <button class="btn btn-outline-primary" onclick="saveCourses('${u.id}', ${index})">Salva</button>
-                                    </div>
-                                ` : `<p class="mb-0 text-secondary">${u.corsi || 'Nessuno'}</p>`}
-                            </div>
-                            ${adminActions}
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            document.getElementById('tabContent').innerHTML = `<h4 class="fw-bold mb-3">Anagrafica Volontari (${users.length})</h4><div class="row">${usersListHTML}</div>`;
+                    <small class="text-muted"><strong>Tel:</strong> ${u.tel} | <strong>Email:</strong> ${u.email}</small>
+                    <small class="text-muted"><strong>CF:</strong> ${u.cf} | <strong>Sangue:</strong> ${u.sangue || '-'}</small>
+                    ${isAdmin ? `
+                        <div class="mt-2 pt-2 border-top bg-light p-2 rounded">
+                            <select class="form-select form-select-sm mb-2" onchange="changeUserRole('${u.id}', this.value)">
+                                <option value="Volontario" ${u.ruolo === 'Volontario' ? 'selected' : ''}>Volontario</option>
+                                ${ROLES_SINGLE.map(r => `<option value="${r}" ${u.ruolo === r ? 'selected' : ''}>${r}</option>`).join('')}
+                            </select>
+                            <button class="btn btn-sm btn-outline-danger w-100" onclick="deleteUser('${u.id}')">Elimina</button>
+                        </div>` : ''}
+                </div></div>
+            `).join('');
+            document.getElementById('tabContent').innerHTML = `<h4 class="fw-bold mb-3">Anagrafica Volontari (${users.length})</h4><div class="row">${html}</div>`;
         }
 
-        window.changeUserRole = async function(userId, newRole) {
-            try {
-                await updateDoc(doc(db, "users", userId), { ruolo: newRole });
-                invalidateCache('users');
-                alert('Ruolo aggiornato!');
-                loadCloudData();
-            } catch (err) { console.error(err); }
-        }
-
-        window.saveCourses = async function(userId, index) {
-            const val = document.getElementById(`courseInput_${index}`).value;
-            try {
-                await updateDoc(doc(db, "users", userId), { corsi: val });
-                invalidateCache('users');
-                alert('Corsi aggiornati!');
-                loadCloudData();
-            } catch (err) { console.error(err); }
-        }
-
-        window.deleteUser = async function(userId) {
-            if (confirm("Eliminare volontario?")) {
-                try {
-                    await deleteDoc(doc(db, "users", userId));
-                    invalidateCache('users');
-                    loadCloudData();
-                } catch (err) { console.error(err); }
-            }
-        }
-
+        window.changeUserRole = async function(id, r) { await updateDoc(doc(db, "users", id), { ruolo: r }); invalidateCache('users'); loadCloudData(); }
+        window.deleteUser = async function(id) { if (confirm("Eliminare?")) { await deleteDoc(doc(db, "users", id)); invalidateCache('users'); loadCloudData(); } }
         window.addAnnouncement = async function(e) {
             e.preventDefault();
-            try {
-                await addDoc(collection(db, "announcements"), {
-                    titolo: document.getElementById('annTitolo').value,
-                    testo: document.getElementById('annTesto').value,
-                    data: new Date().toLocaleString('it-IT'),
-                    autore: `${loggedUser.nome} ${loggedUser.cognome}`,
-                    ruoloAutore: loggedUser.ruolo,
-                    lettiDa: []
-                });
-                invalidateCache('announcements');
-                alert("Avviso pubblicato!");
-                loadCloudData();
-            } catch (err) { console.error(err); }
+            await addDoc(collection(db, "announcements"), { titolo: document.getElementById('annTitolo').value, testo: document.getElementById('annTesto').value, data: new Date().toLocaleString('it-IT'), autore: `${loggedUser.nome} ${loggedUser.cognome}`, lettiDa: [] });
+            invalidateCache('announcements'); loadCloudData();
         }
-
-        window.deleteAnnouncement = async function(id) {
-            if (confirm("Eliminare avviso?")) {
-                try {
-                    await deleteDoc(doc(db, "announcements", id));
-                    invalidateCache('announcements');
-                    loadCloudData();
-                } catch (err) { console.error(err); }
-            }
-        }
-window.renderTurni = function() {
+        window.deleteAnnouncement = async function(id) { await deleteDoc(doc(db, "announcements", id)); invalidateCache('announcements'); loadCloudData(); }
+// --------------------------------------------------
+        // PARTE 6: GESTIONE TURNI DI SERVIZIO
+        // --------------------------------------------------
+        window.renderTurni = function() {
             const isAdmin = isSuperAdmin();
             let shiftsHTML = shifts.map((s, i) => `
-                <div class="col-md-6 mb-3">
-                    <div class="card p-3 border-start border-4 border-primary h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                <h5 class="fw-bold text-primary mb-0">${s.tipoServizio}</h5>
-                                <span class="badge bg-success">In Corso</span>
-                            </div>
-                            <p class="mb-1"><strong>Data / Ora:</strong> ${s.data} - ${s.oraInizio}</p>
-                            <p class="mb-1"><strong>Mezzo:</strong> ${s.mezzoUsato || 'Nessuno'}</p>
-                            <ul class="list-unstyled small mt-2">
-                                ${s.volontariDettaglio ? s.volontariDettaglio.map(v => `<li><strong>${v.nome}:</strong> ${v.ruoloOperativo}</li>`).join('') : ''}
-                            </ul>
-                        </div>
-                        <div>
-                            <button class="btn btn-outline-success btn-sm w-100 fw-bold mt-2" onclick="closeShiftModal('${s.id}', ${i})"><i class="bi bi-check2-square me-1"></i> Chiudi Turno</button>
-                            ${isAdmin ? `<button class="btn btn-outline-danger btn-sm w-100 mt-2" onclick="deleteActiveShift('${s.id}')">Elimina</button>` : ''}
-                        </div>
+                <div class="col-md-6 mb-3"><div class="card p-3 border-start border-4 border-primary h-100 d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="fw-bold text-primary mb-0">${s.tipoServizio}</h5><span class="badge bg-success">In Corso</span></div>
+                        <p class="mb-1"><strong>Data / Ora:</strong> ${s.data} - ${s.oraInizio}</p>
+                        <p class="mb-1"><strong>Mezzo:</strong> ${s.mezzoUsato || 'Nessuno'}</p>
+                        <ul class="list-unstyled small mt-2">${(s.volontariDettaglio || []).map(v => `<li><strong>${v.nome}:</strong> ${v.ruoloOperativo}</li>`).join('')}</ul>
                     </div>
-                </div>
+                    <div>
+                        <button class="btn btn-outline-success btn-sm w-100 fw-bold mt-2" onclick="closeShiftModal('${s.id}', ${i})">Chiudi Turno</button>
+                        ${isAdmin ? `<button class="btn btn-outline-danger btn-sm w-100 mt-2" onclick="deleteActiveShift('${s.id}')">Elimina</button>` : ''}
+                    </div>
+                </div></div>
             `).join('');
 
             let optionsTipologia = SERVICE_TYPES.map(st => `<option value="${st}">${st}</option>`).join('');
             let optionsMezzi = `<option value="Nessun Mezzo">Nessun Mezzo</option>` + vehicles.map(v => `<option value="${v.id}">${v.modello} [${v.targa}]</option>`).join('');
-
             let usersChecklistHTML = users.map((u, idx) => `
                 <div class="border p-2 rounded mb-2 bg-white">
                     <div class="form-check">
@@ -709,12 +476,8 @@ window.renderTurni = function() {
                     </div>
                     <div id="vol_opts_${idx}" class="mt-2 ps-3 d-none border-start border-3 border-info">
                         <div class="d-flex flex-wrap gap-2 mb-2">
-                            ${OPERATIVE_ROLES.map(r => `
-                                <div class="form-check"><input class="form-check-input op-role-cb_${idx}" type="checkbox" value="${r}" id="role_${r}_${idx}" onchange="toggleChecklistMansione(${idx})"><label class="form-check-label small" for="role_${r}_${idx}">${r}</label></div>
-                            `).join('')}
+                            ${OPERATIVE_ROLES.map(r => `<div class="form-check"><input class="form-check-input op-role-cb_${idx}" type="checkbox" value="${r}" id="role_${r}_${idx}"><label class="form-check-label small" for="role_${r}_${idx}">${r}</label></div>`).join('')}
                         </div>
-                        <div id="checklist_cs_${idx}" class="form-check small bg-warning bg-opacity-10 p-2 rounded mb-2 d-none"><input class="form-check-input" type="checkbox" id="chk_cs_${idx}"><label class="form-check-label fw-bold" for="chk_cs_${idx}">Caposquadra: Controllato DPI e radio.</label></div>
-                        <div id="checklist_aut_${idx}" class="form-check small bg-info bg-opacity-10 p-2 rounded mb-2 d-none"><input class="form-check-input" type="checkbox" id="chk_aut_${idx}"><label class="form-check-label fw-bold" for="chk_aut_${idx}">Autista: Controllati livelli liquidi.</label></div>
                     </div>
                 </div>
             `).join('');
@@ -723,15 +486,8 @@ window.renderTurni = function() {
                 <div class="card p-4 mb-4">
                     <h4 class="fw-bold text-primary mb-3">Apertura Nuovo Turno</h4>
                     <form onsubmit="addShift(event)">
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label>Servizio*</label><select id="shiftTipo" class="form-select" required>${optionsTipologia}</select></div>
-                            <div class="col-md-6 mb-3"><label>Data*</label><input type="date" id="shiftData" class="form-control" required></div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-4 mb-3"><label>Inizio*</label><input type="time" id="shiftOraInizio" class="form-control" required></div>
-                            <div class="col-md-4 mb-3"><label>Fine Presunta*</label><input type="time" id="shiftOraFine" class="form-control" required></div>
-                            <div class="col-md-4 mb-3"><label>Mezzo</label><select id="shiftMezzo" class="form-select">${optionsMezzi}</select></div>
-                        </div>
+                        <div class="row"><div class="col-md-6 mb-3"><label>Servizio*</label><select id="shiftTipo" class="form-select" required>${optionsTipologia}</select></div><div class="col-md-6 mb-3"><label>Data*</label><input type="date" id="shiftData" class="form-control" required></div></div>
+                        <div class="row"><div class="col-md-4 mb-3"><label>Inizio*</label><input type="time" id="shiftOraInizio" class="form-control" required></div><div class="col-md-4 mb-3"><label>Fine Presunta*</label><input type="time" id="shiftOraFine" class="form-control" required></div><div class="col-md-4 mb-3"><label>Mezzo</label><select id="shiftMezzo" class="form-select">${optionsMezzi}</select></div></div>
                         <div class="mb-3"><label class="fw-bold">Volontari e Ruoli:*</label><div class="p-3 border rounded bg-light" style="max-height: 250px; overflow-y: auto;">${usersChecklistHTML}</div></div>
                         <button type="submit" class="btn btn-success fw-bold">Apri Turno</button>
                     </form>
@@ -743,19 +499,8 @@ window.renderTurni = function() {
         }
 
         window.toggleVolOptions = function(idx) {
-            const cb = document.getElementById(`vol_cb_${idx}`);
-            const opts = document.getElementById(`vol_opts_${idx}`);
+            const cb = document.getElementById(`vol_cb_${idx}`), opts = document.getElementById(`vol_opts_${idx}`);
             if (cb.checked) opts.classList.remove('d-none'); else opts.classList.add('d-none');
-        }
-
-        window.toggleChecklistMansione = function(idx) {
-            const isCS = document.getElementById(`role_Caposquadra_${idx}`)?.checked;
-            const isAut = document.getElementById(`role_Autista_${idx}`)?.checked;
-            const chkCS = document.getElementById(`checklist_cs_${idx}`);
-            const chkAut = document.getElementById(`checklist_aut_${idx}`);
-
-            if (isCS) chkCS.classList.remove('d-none'); else { chkCS.classList.add('d-none'); document.getElementById(`chk_cs_${idx}`).checked = false; }
-            if (isAut) chkAut.classList.remove('d-none'); else { chkAut.classList.add('d-none'); document.getElementById(`chk_aut_${idx}`).checked = false; }
         }
 
         window.addShift = async function(e) {
@@ -765,44 +510,32 @@ window.renderTurni = function() {
                 const cb = document.getElementById(`vol_cb_${idx}`);
                 if (cb && cb.checked) {
                     let rolesList = [];
-                    OPERATIVE_ROLES.forEach(r => {
-                        if (document.getElementById(`role_${r}_${idx}`)?.checked) rolesList.push(r);
-                    });
+                    OPERATIVE_ROLES.forEach(r => { if (document.getElementById(`role_${r}_${idx}`)?.checked) rolesList.push(r); });
                     if (rolesList.length === 0) { alert(`Seleziona ruolo per ${u.nome}`); throw new Error(); }
                     selectedVols.push({ nome: `${u.nome} ${u.cognome}`, ruoloOperativo: rolesList.join(' + '), mansioniSpuntate: true });
                 }
             });
-
             if (selectedVols.length === 0) { alert("Seleziona almeno un volontario"); return; }
             const mezzoId = document.getElementById('shiftMezzo').value;
-            let mezzoStr = "Nessun Mezzo";
-            let vehicleObj = null;
+            let mezzoStr = "Nessun Mezzo", vehicleObj = null;
             if (mezzoId !== "Nessun Mezzo") {
                 vehicleObj = vehicles.find(v => v.id === mezzoId);
                 if (vehicleObj) mezzoStr = `${vehicleObj.modello} (${vehicleObj.targa})`;
             }
-
             try {
                 await addDoc(collection(db, "shifts"), {
-                    tipoServizio: document.getElementById('shiftTipo').value,
-                    data: document.getElementById('shiftData').value,
-                    oraInizio: document.getElementById('shiftOraInizio').value,
-                    oraFine: document.getElementById('shiftOraFine').value,
-                    mezzoId: mezzoId,
-                    mezzoUsato: mezzoStr,
-                    kmInizialiMezzo: vehicleObj ? vehicleObj.km : 0,
-                    volontariDettaglio: selectedVols
+                    tipoServizio: document.getElementById('shiftTipo').value, data: document.getElementById('shiftData').value,
+                    oraInizio: document.getElementById('shiftOraInizio').value, oraFine: document.getElementById('shiftOraFine').value,
+                    mezzoId: mezzoId, mezzoUsato: mezzoStr, kmInizialiMezzo: vehicleObj ? vehicleObj.km : 0, volontariDettaglio: selectedVols
                 });
-                alert("Turno aperto!");
-                loadCloudData();
-            } catch (err) { console.error(err); }
+                alert("Turno aperto!"); loadCloudData();
+            } catch (err) {}
         }
 
         window.closeShiftModal = async function(shiftId, index) {
             const shiftToClose = shifts[index];
             const oraFineReale = prompt("Ora fine effettiva (HH:MM):", shiftToClose.oraFine) || shiftToClose.oraFine;
             let kmPercorsi = 0, kmFinali = 0;
-
             if (shiftToClose.mezzoId && shiftToClose.mezzoId !== "Nessun Mezzo") {
                 const currentVehicle = vehicles.find(v => v.id === shiftToClose.mezzoId);
                 const kmAttuali = currentVehicle ? currentVehicle.km : (shiftToClose.kmInizialiMezzo || 0);
@@ -810,53 +543,37 @@ window.renderTurni = function() {
                 if (kmFinaliInput !== null) {
                     kmFinali = parseInt(kmFinaliInput, 10) || kmAttuali;
                     kmPercorsi = kmFinali - kmAttuali;
-                    if (currentVehicle) {
-                        await updateDoc(doc(db, "vehicles", currentVehicle.id), { km: kmFinali });
-                        invalidateCache('vehicles');
-                    }
+                    if (currentVehicle) { await updateDoc(doc(db, "vehicles", currentVehicle.id), { km: kmFinali }); invalidateCache('vehicles'); }
                 }
-            } else {
-                kmPercorsi = parseInt(prompt("KM percorsi:", "0"), 10) || 0;
-            }
+            } else { kmPercorsi = parseInt(prompt("KM percorsi:", "0"), 10) || 0; }
 
             try {
-                await addDoc(collection(db, "historyShifts"), {
-                    ...shiftToClose, oraFine: oraFineReale, kmFinaliMezzo: kmFinali, kmPercorsi: kmPercorsi, dataChiusura: new Date().toLocaleDateString('it-IT')
-                });
+                await addDoc(collection(db, "historyShifts"), { ...shiftToClose, oraFine: oraFineReale, kmFinaliMezzo: kmFinali, kmPercorsi: kmPercorsi, dataChiusura: new Date().toLocaleDateString('it-IT') });
                 await deleteDoc(doc(db, "shifts", shiftId));
-                alert("Servizio chiuso e storico aggiornato!");
-                loadCloudData();
-            } catch (err) { console.error(err); }
+                alert("Servizio chiuso e storico aggiornato!"); loadCloudData();
+            } catch (e) {}
         }
 
-        window.deleteActiveShift = async function(shiftId) {
-            if (confirm("Eliminare turno?")) {
-                try { await deleteDoc(doc(db, "shifts", shiftId)); loadCloudData(); } catch (err) { console.error(err); }
-            }
-        }
-
+        window.deleteActiveShift = async function(shiftId) { if (confirm("Eliminare turno?")) { await deleteDoc(doc(db, "shifts", shiftId)); loadCloudData(); } }
+// --------------------------------------------------
+        // PARTE 7: DISPONIBILITÀ E STORICO SERVIZI COMPLETO
+        // --------------------------------------------------
         window.renderDisponibilita = function() {
             const isAdmin = isSuperAdmin();
             let listHTML = availabilities.map(a => `
-                <div class="col-md-4 mb-3">
-                    <div class="card p-3 border-start border-4 ${a.userEmail === loggedUser.email ? 'border-success bg-light' : 'border-info'} h-100">
-                        <h6 class="fw-bold text-primary">${a.userName}</h6>
-                        <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
-                        <p class="mb-1"><strong>Orario:</strong> ${a.oraInizio} - ${a.oraFine}</p>
-                        ${(a.userEmail === loggedUser.email || isAdmin) ? `<button class="btn btn-sm btn-outline-danger mt-2" onclick="deleteAvailability('${a.id}')">Elimina</button>` : ''}
-                    </div>
-                </div>
+                <div class="col-md-4 mb-3"><div class="card p-3 border-start border-4 ${a.userEmail === loggedUser.email ? 'border-success bg-light' : 'border-info'} h-100">
+                    <h6 class="fw-bold text-primary">${a.userName}</h6>
+                    <p class="mb-1"><strong>Data:</strong> ${a.data}</p>
+                    <p class="mb-1"><strong>Orario:</strong> ${a.oraInizio} - ${a.oraFine}</p>
+                    ${(a.userEmail === loggedUser.email || isAdmin) ? `<button class="btn btn-sm btn-outline-danger mt-2" onclick="deleteAvailability('${a.id}')">Elimina</button>` : ''}
+                </div></div>
             `).join('');
 
             document.getElementById('tabContent').innerHTML = `
                 <div class="card p-4 mb-4">
                     <h4 class="fw-bold text-primary mb-3">Inserisci Disponibilità</h4>
                     <form onsubmit="addAvailability(event)">
-                        <div class="row">
-                            <div class="col-md-4 mb-3"><label>Data*</label><input type="date" id="dispData" class="form-control" required></div>
-                            <div class="col-md-4 mb-3"><label>Inizio*</label><input type="time" id="dispOraInizio" class="form-control" required></div>
-                            <div class="col-md-4 mb-3"><label>Fine*</label><input type="time" id="dispOraFine" class="form-control" required></div>
-                        </div>
+                        <div class="row"><div class="col-md-4 mb-3"><label>Data*</label><input type="date" id="dispData" class="form-control" required></div><div class="col-md-4 mb-3"><label>Inizio*</label><input type="time" id="dispOraInizio" class="form-control" required></div><div class="col-md-4 mb-3"><label>Fine*</label><input type="time" id="dispOraFine" class="form-control" required></div></div>
                         <button type="submit" class="btn btn-success fw-bold">Aggiungi</button>
                     </form>
                 </div>
@@ -868,56 +585,66 @@ window.renderTurni = function() {
 
         window.addAvailability = async function(e) {
             e.preventDefault();
-            try {
-                await addDoc(collection(db, "availabilities"), {
-                    userEmail: loggedUser.email, userName: `${loggedUser.nome} ${loggedUser.cognome}`,
-                    data: document.getElementById('dispData').value,
-                    oraInizio: document.getElementById('dispOraInizio').value,
-                    oraFine: document.getElementById('dispOraFine').value,
-                    note: ""
-                });
-                alert("Disponibilità inserita!");
-                loadCloudData();
-            } catch (err) { console.error(err); }
+            await addDoc(collection(db, "availabilities"), { userEmail: loggedUser.email, userName: `${loggedUser.nome} ${loggedUser.cognome}`, data: document.getElementById('dispData').value, oraInizio: document.getElementById('dispOraInizio').value, oraFine: document.getElementById('dispOraFine').value, note: "" });
+            alert("Disponibilità inserita!"); loadCloudData();
         }
 
-        window.deleteAvailability = async function(id) {
-            if (confirm("Eliminare?")) { try { await deleteDoc(doc(db, "availabilities", id)); loadCloudData(); } catch (e) { console.error(e); } }
-        }
+        window.deleteAvailability = async function(id) { if (confirm("Eliminare?")) { await deleteDoc(doc(db, "availabilities", id)); loadCloudData(); } }
 
         window.renderStorico = function() {
             const isAdmin = isSuperAdmin();
             let histHTML = historyShifts.map(s => `
-                <div class="col-md-6 mb-3">
-                    <div class="card p-3 border-start border-4 border-secondary h-100">
-                        <h5 class="fw-bold text-secondary">${s.tipoServizio}</h5>
-                        <p class="mb-1"><strong>Data:</strong> ${s.data} (Chiuso il: ${s.dataChiusura || 'N/D'})</p>
-                        <p class="mb-1"><strong>KM percorsi:</strong> ${s.kmPercorsi || 0} km</p>
-                        ${isAdmin ? `<button class="btn btn-sm btn-outline-danger mt-2" onclick="deleteHistoryShift('${s.id}')">Elimina</button>` : ''}
+                <div class="col-md-6 mb-3"><div class="card p-3 border-start border-4 border-secondary h-100 d-flex flex-column justify-content-between">
+                    <div>
+                        <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="fw-bold text-secondary mb-0">${s.tipoServizio}</h5><span class="badge bg-secondary">Concluso</span></div>
+                        <p class="mb-1"><strong>Data Servizio:</strong> ${s.data} (Chiuso il: ${s.dataChiusura || 'N/D'})</p>
+                        <p class="mb-1"><strong>Orario effettivo:</strong> ${s.oraInizio} - ${s.oraFine}</p>
+                        <p class="mb-1"><strong>Mezzo impiegato:</strong> ${s.mezzoUsato || 'Nessuno'} | <strong>KM percorsi:</strong> ${s.kmPercorsi || 0} km</p>
+                        <p class="mb-1"><strong>Note:</strong> ${s.note || 'Nessuna'}</p>
+                        <hr class="my-2">
+                        <strong>Squadra Impiegata:</strong>
+                        <ul class="list-unstyled mt-1 small mb-0">${(s.volontariDettaglio || []).map(v => `<li><i class="bi bi-person-check me-1"></i>${v.nome} - <em>${v.ruoloOperativo}</em></li>`).join('')}</ul>
                     </div>
-                </div>
+                    ${isAdmin ? `
+                        <div class="mt-3 pt-2 border-top d-flex gap-2">
+                            <button class="btn btn-sm btn-outline-primary w-50" onclick="editHistoryShift('${s.id}')"><i class="bi bi-pencil-square me-1"></i>Modifica</button>
+                            <button class="btn btn-sm btn-outline-danger w-50" onclick="deleteHistoryShift('${s.id}')"><i class="bi bi-trash me-1"></i>Elimina</button>
+                        </div>` : ''}
+                </div></div>
             `).join('');
-            document.getElementById('tabContent').innerHTML = `<h4 class="fw-bold mb-3">Storico Servizi (${historyShifts.length})</h4><div class="row">${histHTML || '<div class="col-12 text-muted">Nessun servizio.</div>'}</div>`;
+
+            document.getElementById('tabContent').innerHTML = `<h4 class="fw-bold mb-3"><i class="bi bi-clock-history me-2"></i>Storico Servizi Conclusi (${historyShifts.length})</h4><div class="row">${histHTML || '<div class="col-12 text-muted">Nessun servizio nello storico.</div>'}</div>`;
         }
 
-        window.deleteHistoryShift = async function(id) {
-            if (confirm("Eliminare?")) { try { await deleteDoc(doc(db, "historyShifts", id)); loadCloudData(); } catch (e) {} }
+        window.editHistoryShift = async function(id) {
+            const s = historyShifts.find(item => item.id === id);
+            if (!s) return;
+            const newKm = prompt("Modifica KM percorsi:", s.kmPercorsi || 0);
+            const newNote = prompt("Modifica note servizio:", s.note || "");
+            if (newKm !== null) {
+                try {
+                    await updateDoc(doc(db, "historyShifts", id), { kmPercorsi: parseInt(newKm, 10) || s.kmPercorsi, note: newNote });
+                    alert("Storico aggiornato con successo!"); loadCloudData();
+                } catch (e) {}
+            }
         }
 
+        window.deleteHistoryShift = async function(id) { if (confirm("Eliminare dallo storico?")) { await deleteDoc(doc(db, "historyShifts", id)); loadCloudData(); } }
+// --------------------------------------------------
+        // PARTE 8: MEZZI E RIFORNIMENTI CARBURANTE
+        // --------------------------------------------------
         window.renderMezzi = function() {
             const isAdmin = isSuperAdmin();
             let vehiclesHTML = vehicles.map(v => `
-                <div class="col-md-4 mb-3">
-                    <div class="card p-3 h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            <img src="${v.foto}" class="vehicle-img mb-3" alt="Mezzo">
-                            <h4 class="fw-bold text-primary">${v.modello}</h4>
-                            <p class="mb-1"><strong>Targa:</strong> ${v.targa}</p>
-                            <p class="mb-1"><strong>KM:</strong> ${v.km} km</p>
-                        </div>
-                        ${isAdmin ? `<div class="mt-3 pt-2 border-top d-flex gap-2"><button class="btn btn-outline-primary btn-sm w-50" onclick="editVehicle('${v.id}')">Modifica</button><button class="btn btn-outline-danger btn-sm w-50" onclick="deleteVehicle('${v.id}')">Elimina</button></div>` : ''}
+                <div class="col-md-4 mb-3"><div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                    <div>
+                        <img src="${v.foto}" class="vehicle-img mb-3" alt="Mezzo">
+                        <h4 class="fw-bold text-primary">${v.modello}</h4>
+                        <p class="mb-1"><strong>Targa:</strong> ${v.targa}</p>
+                        <p class="mb-1"><strong>KM:</strong> ${v.km} km</p>
                     </div>
-                </div>
+                    ${isAdmin ? `<div class="mt-3 pt-2 border-top d-flex gap-2"><button class="btn btn-outline-primary btn-sm w-50" onclick="editVehicle('${v.id}')">Modifica</button><button class="btn btn-outline-danger btn-sm w-50" onclick="deleteVehicle('${v.id}')">Elimina</button></div>` : ''}
+                </div></div>
             `).join('');
 
             document.getElementById('tabContent').innerHTML = `
@@ -926,15 +653,11 @@ window.renderTurni = function() {
                     <h4 class="fw-bold text-primary mb-3">Registra Nuovo Mezzo</h4>
                     <form onsubmit="addVehicle(event)">
                         <div class="mb-3"><label>Foto*</label><input type="file" id="vehFoto" accept="image/*" class="form-control" required></div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label>Modello*</label><input type="text" id="vehModello" class="form-control" required></div>
-                            <div class="col-md-6 mb-3"><label>Targa*</label><input type="text" id="vehTarga" class="form-control" required></div>
-                        </div>
+                        <div class="row"><div class="col-md-6 mb-3"><label>Modello*</label><input type="text" id="vehModello" class="form-control" required></div><div class="col-md-6 mb-3"><label>Targa*</label><input type="text" id="vehTarga" class="form-control" required></div></div>
                         <div class="mb-3"><label>KM Iniziali*</label><input type="number" id="vehKm" class="form-control" value="0" required></div>
                         <button type="submit" class="btn btn-primary fw-bold">Aggiungi Mezzo</button>
                     </form>
-                </div>
-                ` : ''}
+                </div>` : ''}
                 <h4 class="fw-bold mb-3">Parco Automezzi (${vehicles.length})</h4>
                 <div class="row">${vehiclesHTML || '<div class="col-12 text-muted">Nessun mezzo.</div>'}</div>
             `;
@@ -942,54 +665,33 @@ window.renderTurni = function() {
 
         window.addVehicle = async function(e) {
             e.preventDefault();
-            const fotoFile = document.getElementById('vehFoto').files[0];
-            if (!fotoFile) return;
-            try {
-                const compressedDataUrl = await compressImage(fotoFile, 800, 0.7);
-                await addDoc(collection(db, "vehicles"), {
-                    modello: document.getElementById('vehModello').value,
-                    targa: document.getElementById('vehTarga').value,
-                    km: parseInt(document.getElementById('vehKm').value, 10) || 0,
-                    foto: compressedDataUrl
-                });
-                invalidateCache('vehicles');
-                alert("Mezzo aggiunto!");
-                loadCloudData();
-            } catch (err) { console.error(err); }
+            const f = document.getElementById('vehFoto').files[0];
+            if (!f) return;
+            const foto = await compressImage(f, 800, 0.7);
+            await addDoc(collection(db, "vehicles"), { modello: document.getElementById('vehModello').value, targa: document.getElementById('vehTarga').value, km: parseInt(document.getElementById('vehKm').value, 10) || 0, foto: foto });
+            invalidateCache('vehicles'); alert("Mezzo aggiunto!"); loadCloudData();
         }
 
         window.editVehicle = async function(id) {
             const v = vehicles.find(item => item.id === id);
             if (!v) return;
             const newKm = prompt("Aggiorna KM:", v.km);
-            if (newKm !== null) {
-                try {
-                    await updateDoc(doc(db, "vehicles", id), { km: parseInt(newKm, 10) || v.km });
-                    invalidateCache('vehicles');
-                    alert("Aggiornato!");
-                    loadCloudData();
-                } catch (e) {}
-            }
+            if (newKm !== null) { await updateDoc(doc(db, "vehicles", id), { km: parseInt(newKm, 10) || v.km }); invalidateCache('vehicles'); loadCloudData(); }
         }
 
-        window.deleteVehicle = async function(id) {
-            if (confirm("Eliminare mezzo?")) {
-                try { await deleteDoc(doc(db, "vehicles", id)); invalidateCache('vehicles'); loadCloudData(); } catch (e) {}
-            }
-        }
-window.renderRifornimenti = function() {
+        window.deleteVehicle = async function(id) { if (confirm("Eliminare mezzo?")) { await deleteDoc(doc(db, "vehicles", id)); invalidateCache('vehicles'); loadCloudData(); } }
+
+        window.renderRifornimenti = function() {
             const isAdmin = isSuperAdmin();
             let refHTML = refuels.map(r => `
-                <div class="col-md-4 mb-3">
-                    <div class="card p-3 h-100 d-flex flex-column justify-content-between">
-                        <div>
-                            <img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Scontrino">
-                            <h5 class="fw-bold text-primary">${r.mezzo}</h5>
-                            <p class="mb-1"><strong>Litri:</strong> ${r.litri} L | <strong>Importo:</strong> &euro; ${r.importo.toFixed(2)}</p>
-                        </div>
-                        ${isAdmin ? `<button class="btn btn-sm btn-outline-danger mt-2" onclick="deleteRefuel('${r.id}')">Elimina</button>` : ''}
+                <div class="col-md-4 mb-3"><div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                    <div>
+                        <img src="${r.fotoScontrino}" class="receipt-img mb-2" alt="Scontrino">
+                        <h5 class="fw-bold text-primary">${r.mezzo}</h5>
+                        <p class="mb-1"><strong>Litri:</strong> ${r.litri} L | <strong>Importo:</strong> &euro; ${r.importo.toFixed(2)}</p>
                     </div>
-                </div>
+                    ${isAdmin ? `<button class="btn btn-sm btn-outline-danger mt-2" onclick="deleteRefuel('${r.id}')">Elimina</button>` : ''}
+                </div></div>
             `).join('');
 
             let optionsMezziRef = vehicles.map(v => `<option value="${v.modello} [${v.targa}]">${v.modello} [${v.targa}]</option>`).join('');
@@ -999,11 +701,7 @@ window.renderRifornimenti = function() {
                     <h4 class="fw-bold text-primary mb-3">Registra Rifornimento</h4>
                     <form onsubmit="addRefuel(event)">
                         <div class="mb-3"><label>Foto Scontrino*</label><input type="file" id="refFoto" accept="image/*" class="form-control" required></div>
-                        <div class="row">
-                            <div class="col-md-4 mb-3"><label>Mezzo*</label><select id="refMezzo" class="form-select" required>${optionsMezziRef}</select></div>
-                            <div class="col-md-4 mb-3"><label>Litri*</label><input type="number" step="0.01" id="refLitri" class="form-control" required></div>
-                            <div class="col-md-4 mb-3"><label>Importo (&euro;)*</label><input type="number" step="0.01" id="refImporto" class="form-control" required></div>
-                        </div>
+                        <div class="row"><div class="col-md-4 mb-3"><label>Mezzo*</label><select id="refMezzo" class="form-select" required>${optionsMezziRef}</select></div><div class="col-md-4 mb-3"><label>Litri*</label><input type="number" step="0.01" id="refLitri" class="form-control" required></div><div class="col-md-4 mb-3"><label>Importo (&euro;)*</label><input type="number" step="0.01" id="refImporto" class="form-control" required></div></div>
                         <button type="submit" class="btn btn-warning fw-bold text-dark">Salva Rifornimento</button>
                     </form>
                 </div>
@@ -1014,76 +712,56 @@ window.renderRifornimenti = function() {
 
         window.addRefuel = async function(e) {
             e.preventDefault();
-            const fotoFile = document.getElementById('refFoto').files[0];
-            if (!fotoFile) return;
-            try {
-                const compressedDataUrl = await compressImage(fotoFile, 800, 0.7);
-                await addDoc(collection(db, "refuels"), {
-                    mezzo: document.getElementById('refMezzo').value,
-                    litri: parseFloat(document.getElementById('refLitri').value) || 0,
-                    importo: parseFloat(document.getElementById('refImporto').value) || 0,
-                    data: new Date().toISOString().split('T')[0],
-                    ora: new Date().toLocaleTimeString(),
-                    volontario: `${loggedUser.nome} ${loggedUser.cognome}`,
-                    fotoScontrino: compressedDataUrl
-                });
-                invalidateCache('refuels');
-                alert("Rifornimento salvato!");
-                loadCloudData();
-            } catch (err) { console.error(err); }
+            const f = document.getElementById('refFoto').files[0];
+            if (!f) return;
+            const foto = await compressImage(f, 800, 0.7);
+            await addDoc(collection(db, "refuels"), { mezzo: document.getElementById('refMezzo').value, litri: parseFloat(document.getElementById('refLitri').value) || 0, importo: parseFloat(document.getElementById('refImporto').value) || 0, data: new Date().toISOString().split('T')[0], ora: new Date().toLocaleTimeString(), volontario: `${loggedUser.nome} ${loggedUser.cognome}`, fotoScontrino: foto });
+            invalidateCache('refuels'); alert("Rifornimento salvato!"); loadCloudData();
         }
 
-        window.deleteRefuel = async function(id) {
-            if (confirm("Eliminare?")) { try { await deleteDoc(doc(db, "refuels", id)); invalidateCache('refuels'); loadCloudData(); } catch (e) {} }
-        }
-
-        window.renderMappa = function() {
+        window.deleteRefuel = async function(id) { if (confirm("Eliminare?")) { await deleteDoc(doc(db, "refuels", id)); invalidateCache('refuels'); loadCloudData(); } }
+// --------------------------------------------------
+        // PARTE 9: PUNTI GPS (SENZA MAPPA, NAVIGAZIONE E MODIFICA)
+        // --------------------------------------------------
+        window.renderLuoghi = function() {
             const isAdmin = isSuperAdmin();
             let wpHTML = waterPoints.map(wp => `
-                <div class="col-md-4 mb-3">
-                    <div class="card p-3 h-100">
-                        <img src="${wp.foto}" class="hydrant-img mb-2" alt="Punto Acqua">
+                <div class="col-md-4 mb-3"><div class="card p-3 h-100 d-flex flex-column justify-content-between">
+                    <div>
+                        <img src="${wp.foto}" class="hydrant-img mb-2" alt="Punto">
                         <h5 class="fw-bold text-primary">${wp.nome}</h5>
                         <p class="mb-1"><strong>Tipo:</strong> ${wp.tipo}</p>
-                        ${isAdmin ? `<button class="btn btn-sm btn-outline-danger mt-2" onclick="deleteWaterPoint('${wp.id}')">Elimina</button>` : ''}
+                        <p class="mb-1"><strong>Coordinate GPS:</strong> ${wp.lat}, ${wp.lng}</p>
+                        <p class="mb-1"><strong>Note:</strong> ${wp.portata || 'Nessuna'}</p>
                     </div>
-                </div>
+                    <div>
+                        <a href="https://www.google.com/maps/search/?api=1&query=${wp.lat},${wp.lng}" target="_blank" class="btn btn-success btn-sm w-100 fw-bold mb-2">
+                            <i class="bi bi-navigation me-1"></i> Avvia Navigazione GPS
+                        </a>
+                        ${isAdmin ? `
+                            <div class="pt-2 border-top d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary w-50" onclick="editWaterPoint('${wp.id}')">Modifica</button>
+                                <button class="btn btn-sm btn-outline-danger w-50" onclick="deleteWaterPoint('${wp.id}')">Elimina</button>
+                            </div>` : ''}
+                    </div>
+                </div></div>
             `).join('');
 
             document.getElementById('tabContent').innerHTML = `
                 ${isAdmin ? `
                 <div class="card p-4 mb-4 bg-light border">
-                    <h4 class="fw-bold text-primary mb-3">Aggiungi Punto Idrico</h4>
+                    <h4 class="fw-bold text-primary mb-3">Registra Nuovo Punto GPS (Idrante / Riserva / Luogo)</h4>
                     <form onsubmit="addWaterPoint(event)">
                         <div class="mb-3"><label>Foto*</label><input type="file" id="wpFoto" accept="image/*" class="form-control" required></div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3"><label>Nome*</label><input type="text" id="wpNome" class="form-control" required></div>
-                            <div class="col-md-6 mb-3"><label>Tipo*</label><select id="wpTipo" class="form-select"><option value="Idrante a Colonnina">Idrante</option><option value="Vasca AIB">Vasca AIB</option></select></div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-4 mb-3"><label>Lat*</label><input type="number" step="any" id="wpLat" class="form-control" required></div>
-                            <div class="col-md-4 mb-3"><label>Lng*</label><input type="number" step="any" id="wpLng" class="form-control" required></div>
-                            <div class="col-md-4 mb-3"><label>&nbsp;</label><button type="button" class="btn btn-outline-secondary w-100" onclick="getGPSCoordinates()">GPS</button></div>
-                        </div>
-                        <button type="submit" class="btn btn-primary fw-bold">Salva</button>
+                        <div class="row"><div class="col-md-6 mb-3"><label>Nome / Identificativo*</label><input type="text" id="wpNome" class="form-control" required></div><div class="col-md-6 mb-3"><label>Tipologia*</label><select id="wpTipo" class="form-select"><option value="Idrante a Colonnina">Idrante a Colonnina</option><option value="Idrante Sottosuolo">Idrante Sottosuolo</option><option value="Vasca AIB">Vasca / Punto Attingimento</option><option value="Altro Luogo Operativo">Altro Luogo</option></select></div></div>
+                        <div class="row"><div class="col-md-4 mb-3"><label>Latitudine*</label><input type="number" step="any" id="wpLat" class="form-control" required></div><div class="col-md-4 mb-3"><label>Longitudine*</label><input type="number" step="any" id="wpLng" class="form-control" required></div><div class="col-md-4 mb-3"><label>&nbsp;</label><button type="button" class="btn btn-outline-secondary w-100" onclick="getGPSCoordinates()">Rileva GPS</button></div></div>
+                        <div class="mb-3"><label>Note / Pressione / Dettagli</label><input type="text" id="wpPortata" class="form-control" placeholder="es. Ottima pressione"></div>
+                        <button type="submit" class="btn btn-primary fw-bold">Salva Punto GPS</button>
                     </form>
-                </div>
-                ` : ''}
-                <h4 class="fw-bold mb-3">Mappa Idrica</h4>
-                <div class="card p-3 mb-4"><div id="map"></div></div>
-                <div class="row">${wpHTML || '<div class="col-12 text-muted">Nessun punto idrico.</div>'}</div>
+                </div>` : ''}
+                <h4 class="fw-bold mb-3">Elenco Punti e Destinazioni GPS (${waterPoints.length})</h4>
+                <div class="row">${wpHTML || '<div class="col-12 text-muted">Nessun punto GPS registrato.</div>'}</div>
             `;
-
-            setTimeout(() => {
-                if (leafletMap) leafletMap.remove();
-                let centerLat = waterPoints.length > 0 ? waterPoints[0].lat : 42.3944;
-                let centerLng = waterPoints.length > 0 ? waterPoints[0].lng : 12.8575;
-                leafletMap = L.map('map').setView([centerLat, centerLng], 12);
-                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(leafletMap);
-                waterPoints.forEach(wp => {
-                    L.marker([wp.lat, wp.lng]).addTo(leafletMap).bindPopup(`<b>${wp.nome}</b>`);
-                });
-            }, 300);
         }
 
         window.getGPSCoordinates = function() {
@@ -1091,53 +769,57 @@ window.renderRifornimenti = function() {
                 navigator.geolocation.getCurrentPosition(p => {
                     document.getElementById('wpLat').value = p.coords.latitude;
                     document.getElementById('wpLng').value = p.coords.longitude;
-                    alert("GPS acquisito!");
+                    alert("Coordinate GPS acquisite!");
                 });
-            }
+            } else { alert("Geolocalizzazione non supportata."); }
         }
 
         window.addWaterPoint = async function(e) {
             e.preventDefault();
-            const fotoFile = document.getElementById('wpFoto').files[0];
-            if (!fotoFile) return;
-            try {
-                const compressedDataUrl = await compressImage(fotoFile, 800, 0.7);
-                await addDoc(collection(db, "waterPoints"), {
-                    nome: document.getElementById('wpNome').value,
-                    tipo: document.getElementById('wpTipo').value,
-                    lat: parseFloat(document.getElementById('wpLat').value),
-                    lng: parseFloat(document.getElementById('wpLng').value),
-                    foto: compressedDataUrl
-                });
-                invalidateCache('waterPoints');
-                alert("Punto salvato!");
-                loadCloudData();
-            } catch (e) {}
+            const f = document.getElementById('wpFoto').files[0];
+            if (!f) return;
+            const foto = await compressImage(f, 800, 0.7);
+            await addDoc(collection(db, "waterPoints"), {
+                nome: document.getElementById('wpNome').value, tipo: document.getElementById('wpTipo').value,
+                lat: parseFloat(document.getElementById('wpLat').value), lng: parseFloat(document.getElementById('wpLng').value),
+                portata: document.getElementById('wpPortata').value, foto: foto
+            });
+            invalidateCache('waterPoints'); alert("Punto GPS salvato!"); loadCloudData();
         }
 
-        window.deleteWaterPoint = async function(id) {
-            if (confirm("Eliminare?")) { try { await deleteDoc(doc(db, "waterPoints", id)); invalidateCache('waterPoints'); loadCloudData(); } catch (e) {} }
+        window.editWaterPoint = async function(id) {
+            const wp = waterPoints.find(item => item.id === id);
+            if (!wp) return;
+            const newNome = prompt("Modifica nome:", wp.nome);
+            const newLat = prompt("Modifica Latitudine:", wp.lat);
+            const newLng = prompt("Modifica Longitudine:", wp.lng);
+            const newPortata = prompt("Modifica note/portata:", wp.portata || "");
+            if (newNome !== null && newLat !== null && newLng !== null) {
+                try {
+                    await updateDoc(doc(db, "waterPoints", id), {
+                        nome: newNome, lat: parseFloat(newLat) || wp.lat, lng: parseFloat(newLng) || wp.lng, portata: newPortata
+                    });
+                    invalidateCache('waterPoints'); alert("Punto aggiornato!"); loadCloudData();
+                } catch (e) {}
+            }
         }
+
+        window.deleteWaterPoint = async function(id) { if (confirm("Eliminare punto GPS?")) { await deleteDoc(doc(db, "waterPoints", id)); invalidateCache('waterPoints'); loadCloudData(); } }
 
         window.renderArchivioReport = function() {
             if (!isManagerRole()) return;
-            let reportsHTML = uploadedReports.map(rep => `
-                <div class="col-md-6 mb-3">
-                    <div class="card p-3 border-start border-4 border-info h-100">
-                        <h5 class="fw-bold text-primary">${rep.titolo}</h5>
-                        <p class="mb-1"><strong>Periodo:</strong> ${rep.periodo}</p>
-                        <a href="${rep.fileUrl}" download="${rep.fileName}" class="btn btn-sm btn-pc fw-bold mt-2">Scarica (.doc)</a>
-                    </div>
-                </div>
+            let html = uploadedReports.map(rep => `
+                <div class="col-md-6 mb-3"><div class="card p-3 border-start border-4 border-info h-100">
+                    <h5 class="fw-bold text-primary">${rep.titolo}</h5>
+                    <p class="mb-1"><strong>Periodo:</strong> ${rep.periodo}</p>
+                    <a href="${rep.fileUrl}" download="${rep.fileName}" class="btn btn-sm btn-pc fw-bold mt-2">Scarica (.doc)</a>
+                </div></div>
             `).join('');
-
-            document.getElementById('tabContent').innerHTML = `
-                <button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button>
-                <h4 class="fw-bold mb-3">Archivio Report (${uploadedReports.length})</h4>
-                <div class="row">${reportsHTML || '<div class="col-12 text-muted">Nessun report.</div>'}</div>
-            `;
+            document.getElementById('tabContent').innerHTML = `<button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button><h4>Archivio Report</h4><div class="row">${html || '<div class="col-12 text-muted">Nessun report.</div>'}</div>`;
         }
-
+// --------------------------------------------------
+        // PARTE 10: FEEDBACK, REPORT MILITARE E CHIUSURA SCRIPT
+        // --------------------------------------------------
         window.checkMonthlyFeedback = async function() {
             if (!loggedUser || isManagerRole()) return false;
             const today = new Date();
@@ -1146,8 +828,7 @@ window.renderRifornimenti = function() {
                 try {
                     const snap = await getDocs(collection(db, "monthlyFeedbacks"));
                     if (!snap.docs.some(d => d.data().userEmail === loggedUser.email && d.data().periodo === cur)) {
-                        renderFeedbackModal(cur);
-                        return true;
+                        renderFeedbackModal(cur); return true;
                     }
                 } catch (e) {}
             }
@@ -1156,33 +837,22 @@ window.renderRifornimenti = function() {
 
         window.renderFeedbackModal = function(periodo) {
             document.getElementById('appContainer').innerHTML = `
-                <div class="row justify-content-center">
-                    <div class="col-md-7">
-                        <div class="card p-4 border-danger shadow-lg text-center">
-                            <h3 class="fw-bold text-primary">Valutazione PWA Mensile</h3>
-                            <form onsubmit="submitMonthlyFeedback(event, '${periodo}')">
-                                <div class="mb-3 text-start"><label>Voto (1-5)*</label><select id="fbVoto" class="form-select"><option value="5">5 - Ottima</option><option value="3">3 - Sufficiente</option><option value="1">1 - Scarsa</option></select></div>
-                                <div class="mb-3 text-start"><label>Cosa ti piace?*</label><textarea id="fbPiace" class="form-control" required></textarea></div>
-                                <div class="mb-3 text-start"><label>Migliorie:*</label><textarea id="fbMigliorie" class="form-control" required></textarea></div>
-                                <button type="submit" class="btn btn-pc w-100 fw-bold">Invia e sblocca app</button>
-                            </form>
-                        </div>
-                    </div>
-                </div>
+                <div class="row justify-content-center"><div class="col-md-7"><div class="card p-4 border-danger shadow-lg text-center">
+                    <h3 class="fw-bold text-primary">Valutazione PWA Mensile</h3>
+                    <form onsubmit="submitMonthlyFeedback(event, '${periodo}')">
+                        <div class="mb-3 text-start"><label>Voto (1-5)*</label><select id="fbVoto" class="form-select"><option value="5">5 - Ottima</option><option value="3">3 - Sufficiente</option><option value="1">1 - Scarsa</option></select></div>
+                        <div class="mb-3 text-start"><label>Cosa ti piace?*</label><textarea id="fbPiace" class="form-control" required></textarea></div>
+                        <div class="mb-3 text-start"><label>Migliorie:*</label><textarea id="fbMigliorie" class="form-control" required></textarea></div>
+                        <button type="submit" class="btn btn-pc w-100 fw-bold">Invia e sblocca app</button>
+                    </form>
+                </div></div></div>
             `;
         }
 
         window.submitMonthlyFeedback = async function(e, periodo) {
             e.preventDefault();
-            try {
-                await addDoc(collection(db, "monthlyFeedbacks"), {
-                    periodo: periodo, voto: document.getElementById('fbVoto').value,
-                    cosaPiace: document.getElementById('fbPiace').value, migliorie: document.getElementById('fbMigliorie').value,
-                    dataInvio: new Date().toLocaleString('it-IT'), userEmail: loggedUser.email, userName: `${loggedUser.nome} ${loggedUser.cognome}`
-                });
-                alert("Grazie! App sbloccata.");
-                loadCloudData();
-            } catch (e) {}
+            await addDoc(collection(db, "monthlyFeedbacks"), { periodo: periodo, voto: document.getElementById('fbVoto').value, cosaPiace: document.getElementById('fbPiace').value, migliorie: document.getElementById('fbMigliorie').value, dataInvio: new Date().toLocaleString('it-IT'), userEmail: loggedUser.email, userName: `${loggedUser.nome} ${loggedUser.cognome}` });
+            alert("Grazie! App sbloccata."); loadCloudData();
         }
 
         window.renderAdminFeedbackDashboard = async function() {
@@ -1192,7 +862,108 @@ window.renderRifornimenti = function() {
             document.getElementById('appContainer').innerHTML = `<button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button><h4>Dashboard Feedback</h4><div class="row">${html}</div>`;
         }
 
-        window.downloadWordReport = function() { alert("Funzione Word disponibile nel menu superiore."); };
+        window.downloadWordReport = function() {
+            const today = new Date();
+            const defaultMonth = String(today.getMonth() + 1).padStart(2, '0') + '/' + today.getFullYear();
+            const inputMonth = prompt("Inserisci Mese e Anno del report (MM/AAAA):", defaultMonth);
+            if (!inputMonth) return;
+            const [mStr, yStr] = inputMonth.split('/');
+            const monthInt = parseInt(mStr, 10), yearInt = parseInt(yStr, 10);
+            if (isNaN(monthInt) || isNaN(yearInt)) { alert("Data non valida!"); return; }
+
+            let filteredShifts = historyShifts.filter(s => {
+                if (!s.data) return false;
+                const p = s.data.split('-');
+                return p.length === 3 && parseInt(p[0], 10) === yearInt && parseInt(p[1], 10) === monthInt;
+            });
+            let filteredRefuels = refuels.filter(r => {
+                if (!r.data) return false;
+                const p = r.data.split('-');
+                return p.length === 3 && parseInt(p[0], 10) === yearInt && parseInt(p[1], 10) === monthInt;
+            });
+
+            let totalKm = 0, totalFuelCost = 0;
+            filteredShifts.forEach(s => totalKm += (parseInt(s.kmPercorsi, 10) || 0));
+            filteredRefuels.forEach(r => totalFuelCost += (parseFloat(r.importo) || 0));
+
+            let printWindow = window.open('', '_blank');
+            printWindow.document.write(`
+                <html>
+                <head>
+                    <meta charset="utf-8">
+                    <title>STATO DI SERVIZIO - N.O.E. RIETI 210</title>
+                    <style>
+                        body { font-family: 'Courier New', Courier, monospace; font-size: 11pt; color: #111; margin: 2cm; background-color: #fff; }
+                        .watermark { position: fixed; top: 35%; left: 20%; width: 60%; opacity: 0.08; z-index: -1; text-align: center; }
+                        .watermark img { width: 100%; height: auto; }
+                        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+                        .header h2, .header h4 { margin: 2px; text-transform: uppercase; font-weight: bold; }
+                        .section-title { font-weight: bold; text-transform: uppercase; border-bottom: 1px dashed #000; margin-top: 20px; margin-bottom: 10px; font-size: 12pt; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10pt; }
+                        th, td { border: 1px solid #000; padding: 6px; text-align: left; }
+                        th { background-color: #eaeaea; text-transform: uppercase; }
+                        .signatures { margin-top: 50px; width: 100%; }
+                        .signatures td { border: none; text-align: center; width: 50%; padding-top: 40px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="watermark"><img src="logo bianco.png" alt="Logo"></div>
+                    <div class="header">
+                        <h2>NUCLEO OPERATIVO EMERGENZA &bull; N.O.E. RIETI 210</h2>
+                        <h4>STATO DI SERVIZIO E RIEPILOGO TATTICO MENSILE</h4>
+                        <p style="font-size: 10pt; margin-top: 5px;">PERIODO DI RIFERIMENTO: <strong>${inputMonth}</strong> &bull; PROTOCOLLO INTERNO</p>
+                    </div>
+
+                    <div class="section-title">1. Riepilogo Operativo Generale</div>
+                    <p><strong>- Totale Servizi/Turni Conclusi:</strong> ${filteredShifts.length}</p>
+                    <p><strong>- Chilometraggio Totale Flotta:</strong> ${totalKm} KM</p>
+                    <p><strong>- Rifornimenti Carburante:</strong> ${filteredRefuels.length} registrazioni (Spesa Totale: &euro; ${totalFuelCost.toFixed(2)})</p>
+
+                    <div class="section-title">2. Registro Dettagliato Attività Svolte</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Data</th>
+                                <th>Tipologia Servizio</th>
+                                <th>Mezzo</th>
+                                <th>KM</th>
+                                <th>Squadra & Note</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredShifts.length === 0 ? '<tr><td colspan="5" style="text-align:center;"><em>Nessuna attività registrata nel periodo.</em></td></tr>' :
+                            filteredShifts.map(s => `
+                                <tr>
+                                    <td>${s.data} (${s.oraInizio}-${s.oraFine})</td>
+                                    <td><strong>${s.tipoServizio}</strong></td>
+                                    <td>${s.mezzoUsato || 'Nessuno'}</td>
+                                    <td>${s.kmPercorsi || 0} km</td>
+                                    <td>Squadra: ${(s.volontariDettaglio || []).map(v => v.nome).join(', ')}<br><em>Note: ${s.note || 'Nessuna'}</em></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <table class="signatures">
+                        <tr>
+                            <td>
+                                <strong>Il Redattore del Reparto</strong><br>
+                                Responsabile App / Gestionale Cloud<br><br><br>
+                                ____________________________________
+                            </td>
+                            <td>
+                                <strong>Il Legale Rappresentante</strong><br>
+                                Il Presidente / Comandante di Nucleo<br><br><br>
+                                ____________________________________
+                            </td>
+                        </tr>
+                    </table>
+                </body>
+                </html>
+            `);
+            printWindow.document.close();
+            setTimeout(() => { printWindow.print(); }, 500);
+        };
 
         // Avvio applicazione
         loadCloudData();
