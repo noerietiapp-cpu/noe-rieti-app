@@ -447,7 +447,7 @@
         }
         window.deleteAnnouncement = async function(id) { await deleteDoc(doc(db, "announcements", id)); invalidateCache('announcements'); loadCloudData(); }
 // --------------------------------------------------
-        // PARTE 6: GESTIONE TURNI DI SERVIZIO
+        // PARTE 6: GESTIONE TURNI DI SERVIZIO (CON NOTE ALLA CHIUSURA)
         // --------------------------------------------------
         window.renderTurni = function() {
             const isAdmin = isSuperAdmin();
@@ -535,6 +535,7 @@
         window.closeShiftModal = async function(shiftId, index) {
             const shiftToClose = shifts[index];
             const oraFineReale = prompt("Ora fine effettiva (HH:MM):", shiftToClose.oraFine) || shiftToClose.oraFine;
+            const noteServizio = prompt("Inserisci note o esito dell'intervento:", "Nessuna nota") || "Nessuna nota";
             let kmPercorsi = 0, kmFinali = 0;
             if (shiftToClose.mezzoId && shiftToClose.mezzoId !== "Nessun Mezzo") {
                 const currentVehicle = vehicles.find(v => v.id === shiftToClose.mezzoId);
@@ -548,7 +549,7 @@
             } else { kmPercorsi = parseInt(prompt("KM percorsi:", "0"), 10) || 0; }
 
             try {
-                await addDoc(collection(db, "historyShifts"), { ...shiftToClose, oraFine: oraFineReale, kmFinaliMezzo: kmFinali, kmPercorsi: kmPercorsi, dataChiusura: new Date().toLocaleDateString('it-IT') });
+                await addDoc(collection(db, "historyShifts"), { ...shiftToClose, oraFine: oraFineReale, note: noteServizio, kmFinaliMezzo: kmFinali, kmPercorsi: kmPercorsi, dataChiusura: new Date().toLocaleDateString('it-IT') });
                 await deleteDoc(doc(db, "shifts", shiftId));
                 alert("Servizio chiuso e storico aggiornato!"); loadCloudData();
             } catch (e) {}
@@ -593,8 +594,6 @@
 
         window.renderStorico = function() {
             const isAdmin = isSuperAdmin();
-            
-            // Ordina dal più vecchio al più nuovo basandosi sulla data (formato AAAA-MM-GG)
             let sortedHistory = [...historyShifts].sort((a, b) => new Date(a.data) - new Date(b.data));
 
             let histHTML = sortedHistory.map(s => `
@@ -725,7 +724,7 @@
 
         window.deleteRefuel = async function(id) { if (confirm("Eliminare?")) { await deleteDoc(doc(db, "refuels", id)); invalidateCache('refuels'); loadCloudData(); } }
 // --------------------------------------------------
-        // PARTE 9: PUNTI GPS (SENZA MAPPA, NAVIGAZIONE E MODIFICA)
+        // PARTE 9: PUNTI GPS E ARCHIVIO REPORT RIPRISTINATO
         // --------------------------------------------------
         window.renderLuoghi = function() {
             const isAdmin = isSuperAdmin();
@@ -816,13 +815,48 @@
                 <div class="col-md-6 mb-3"><div class="card p-3 border-start border-4 border-info h-100">
                     <h5 class="fw-bold text-primary">${rep.titolo}</h5>
                     <p class="mb-1"><strong>Periodo:</strong> ${rep.periodo}</p>
-                    <a href="${rep.fileUrl}" download="${rep.fileName}" class="btn btn-sm btn-pc fw-bold mt-2">Scarica (.doc)</a>
+                    <a href="${rep.fileUrl}" target="_blank" class="btn btn-sm btn-pc fw-bold mt-2">Apri Documento</a>
                 </div></div>
             `).join('');
-            document.getElementById('tabContent').innerHTML = `<button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button><h4>Archivio Report</h4><div class="row">${html || '<div class="col-12 text-muted">Nessun report.</div>'}</div>`;
+
+            document.getElementById('tabContent').innerHTML = `
+                <button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')"><i class="bi bi-arrow-left me-1"></i> Indietro</button>
+                <div class="card p-4 mb-4 bg-light border">
+                    <h4 class="fw-bold text-primary mb-3">Carica Nuovo Report in Archivio</h4>
+                    <form onsubmit="uploadArchivedReport(event)">
+                        <div class="mb-3"><label>Titolo del Report*</label><input type="text" id="repTitolo" class="form-control" placeholder="es. Report Operativo Gennaio" required></div>
+                        <div class="mb-3"><label>Periodo (MM/AAAA)*</label><input type="text" id="repPeriodo" class="form-control" placeholder="es. 01/2026" required></div>
+                        <div class="mb-3"><label>Seleziona File Documento/PDF*</label><input type="file" id="repFile" class="form-control" required></div>
+                        <button type="submit" class="btn btn-success fw-bold">Carica in Archivio</button>
+                    </form>
+                </div>
+                <h4 class="fw-bold mb-3">Archivio Storico Report (${uploadedReports.length})</h4>
+                <div class="row">${html || '<div class="col-12 text-muted">Nessun report in archivio.</div>'}</div>
+            `;
+        }
+
+        window.uploadArchivedReport = async function(e) {
+            e.preventDefault();
+            const f = document.getElementById('repFile').files[0];
+            if (!f) return;
+            const reader = new FileReader();
+            reader.onload = async function(event) {
+                try {
+                    await addDoc(collection(db, "uploadedReports"), {
+                        titolo: document.getElementById('repTitolo').value,
+                        periodo: document.getElementById('repPeriodo').value,
+                        fileName: f.name,
+                        fileUrl: event.target.result,
+                        dataCaricamento: new Date().toLocaleDateString('it-IT')
+                    });
+                    alert("Report caricato con successo nell'archivio cloud!");
+                    loadCloudData();
+                } catch(err) { alert("Errore durante il caricamento."); }
+            };
+            reader.readAsDataURL(f);
         }
 // --------------------------------------------------
-        // PARTE 10: FEEDBACK, REPORT MILITARE COMPLETO E CHIUSURA SCRIPT
+        // PARTE 10: FEEDBACK, REPORT MILITARE CON FILIGRANA E CHIUSURA SCRIPT
         // --------------------------------------------------
         window.checkMonthlyFeedback = async function() {
             if (!loggedUser || isManagerRole()) return false;
@@ -866,7 +900,7 @@
             document.getElementById('appContainer').innerHTML = `<button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button><h4>Dashboard Feedback</h4><div class="row">${html}</div>`;
         }
 
-        // --- GENERAZIONE REPORT STILE MILITARE (COMPLETO DI ATTIVITÀ E BACHECA) ---
+        // --- GENERAZIONE REPORT STILE MILITARE (CON FILIGRANA LOGO E TUTTE LE ATTIVITÀ) ---
         window.downloadWordReport = function() {
             const today = new Date();
             const defaultMonth = String(today.getMonth() + 1).padStart(2, '0') + '/' + today.getFullYear();
@@ -876,21 +910,18 @@
             const monthInt = parseInt(mStr, 10), yearInt = parseInt(yStr, 10);
             if (isNaN(monthInt) || isNaN(yearInt)) { alert("Data non valida!"); return; }
 
-            // Filtro turni storici del mese ordinati dal più vecchio al più nuovo
             let filteredShifts = historyShifts.filter(s => {
                 if (!s.data) return false;
                 const p = s.data.split('-');
                 return p.length === 3 && parseInt(p[0], 10) === yearInt && parseInt(p[1], 10) === monthInt;
             }).sort((a, b) => new Date(a.data) - new Date(b.data));
 
-            // Filtro rifornimenti del mese
             let filteredRefuels = refuels.filter(r => {
                 if (!r.data) return false;
                 const p = r.data.split('-');
                 return p.length === 3 && parseInt(p[0], 10) === yearInt && parseInt(p[1], 10) === monthInt;
             });
 
-            // Filtro comunicati di bacheca del mese
             let filteredAnnouncements = announcements.filter(a => {
                 if (!a.data) return false;
                 return a.data.includes(`/${mStr}/${yStr}`) || a.data.includes(`${yStr}-${mStr}`);
@@ -907,8 +938,8 @@
                     <meta charset="utf-8">
                     <title>STATO DI SERVIZIO - N.O.E. RIETI 210</title>
                     <style>
-                        body { font-family: 'Courier New', Courier, monospace; font-size: 10pt; color: #111; margin: 1.5cm; background-color: #fff; }
-                        .watermark { position: fixed; top: 30%; left: 25%; width: 50%; opacity: 0.07; z-index: -1; text-align: center; }
+                        body { font-family: 'Courier New', Courier, monospace; font-size: 10pt; color: #111; margin: 1.5cm; background-color: #fff; position: relative; }
+                        .watermark { position: fixed; top: 30%; left: 25%; width: 50%; opacity: 0.08; z-index: -1; text-align: center; }
                         .watermark img { width: 100%; height: auto; }
                         .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
                         .header h2, .header h4 { margin: 2px; text-transform: uppercase; font-weight: bold; }
@@ -921,7 +952,7 @@
                     </style>
                 </head>
                 <body>
-                    <div class="watermark"><img src="logo bianco.png" alt="Logo"></div>
+                    <div class="watermark"><img src="logo bianco.png" alt="Logo NOE" onerror="this.style.display='none'"></div>
                     <div class="header">
                         <h2>NUCLEO OPERATIVO EMERGENZA &bull; N.O.E. RIETI 210</h2>
                         <h4>RAPPORTO OPERATIVO E STATO DI SERVIZIO MENSILE</h4>
@@ -950,7 +981,7 @@
                                     <td>${s.data}<br>${s.oraInizio} - ${s.oraFine}</td>
                                     <td><strong>${s.tipoServizio}</strong></td>
                                     <td>${s.mezzoUsato || 'Nessuno'}<br>(${s.kmPercorsi || 0} km)</td>
-                                    <td>Squadra: ${(s.volontariDettaglio || []).map(v => v.nome).join(', ')}<br><em>Note: ${s.note || 'Nessuna'}</em></td>
+                                    <td>Squadra: ${(s.volontariDettaglio || []).map(v => `${v.nome} (${v.ruoloOperativo})`).join(', ')}<br><em>Note: ${s.note || 'Nessuna'}</em></td>
                                 </tr>
                             `).join('')}
                         </tbody>
