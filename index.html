@@ -556,7 +556,7 @@
 
         window.deleteActiveShift = async function(shiftId) { if (confirm("Eliminare turno?")) { await deleteDoc(doc(db, "shifts", shiftId)); loadCloudData(); } }
 // --------------------------------------------------
-        // PARTE 7: DISPONIBILITÀ E STORICO SERVIZI COMPLETO
+        // PARTE 7: DISPONIBILITÀ E STORICO SERVIZI (ORDINATO DAL PIU VECCHIO AL PIU NUOVO)
         // --------------------------------------------------
         window.renderDisponibilita = function() {
             const isAdmin = isSuperAdmin();
@@ -593,7 +593,11 @@
 
         window.renderStorico = function() {
             const isAdmin = isSuperAdmin();
-            let histHTML = historyShifts.map(s => `
+            
+            // Ordina dal più vecchio al più nuovo basandosi sulla data (formato AAAA-MM-GG)
+            let sortedHistory = [...historyShifts].sort((a, b) => new Date(a.data) - new Date(b.data));
+
+            let histHTML = sortedHistory.map(s => `
                 <div class="col-md-6 mb-3"><div class="card p-3 border-start border-4 border-secondary h-100 d-flex flex-column justify-content-between">
                     <div>
                         <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="fw-bold text-secondary mb-0">${s.tipoServizio}</h5><span class="badge bg-secondary">Concluso</span></div>
@@ -818,7 +822,7 @@
             document.getElementById('tabContent').innerHTML = `<button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button><h4>Archivio Report</h4><div class="row">${html || '<div class="col-12 text-muted">Nessun report.</div>'}</div>`;
         }
 // --------------------------------------------------
-        // PARTE 10: FEEDBACK, REPORT MILITARE E CHIUSURA SCRIPT
+        // PARTE 10: FEEDBACK, REPORT MILITARE COMPLETO E CHIUSURA SCRIPT
         // --------------------------------------------------
         window.checkMonthlyFeedback = async function() {
             if (!loggedUser || isManagerRole()) return false;
@@ -862,6 +866,7 @@
             document.getElementById('appContainer').innerHTML = `<button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button><h4>Dashboard Feedback</h4><div class="row">${html}</div>`;
         }
 
+        // --- GENERAZIONE REPORT STILE MILITARE (COMPLETO DI ATTIVITÀ E BACHECA) ---
         window.downloadWordReport = function() {
             const today = new Date();
             const defaultMonth = String(today.getMonth() + 1).padStart(2, '0') + '/' + today.getFullYear();
@@ -871,15 +876,24 @@
             const monthInt = parseInt(mStr, 10), yearInt = parseInt(yStr, 10);
             if (isNaN(monthInt) || isNaN(yearInt)) { alert("Data non valida!"); return; }
 
+            // Filtro turni storici del mese ordinati dal più vecchio al più nuovo
             let filteredShifts = historyShifts.filter(s => {
                 if (!s.data) return false;
                 const p = s.data.split('-');
                 return p.length === 3 && parseInt(p[0], 10) === yearInt && parseInt(p[1], 10) === monthInt;
-            });
+            }).sort((a, b) => new Date(a.data) - new Date(b.data));
+
+            // Filtro rifornimenti del mese
             let filteredRefuels = refuels.filter(r => {
                 if (!r.data) return false;
                 const p = r.data.split('-');
                 return p.length === 3 && parseInt(p[0], 10) === yearInt && parseInt(p[1], 10) === monthInt;
+            });
+
+            // Filtro comunicati di bacheca del mese
+            let filteredAnnouncements = announcements.filter(a => {
+                if (!a.data) return false;
+                return a.data.includes(`/${mStr}/${yStr}`) || a.data.includes(`${yStr}-${mStr}`);
             });
 
             let totalKm = 0, totalFuelCost = 0;
@@ -893,52 +907,71 @@
                     <meta charset="utf-8">
                     <title>STATO DI SERVIZIO - N.O.E. RIETI 210</title>
                     <style>
-                        body { font-family: 'Courier New', Courier, monospace; font-size: 11pt; color: #111; margin: 2cm; background-color: #fff; }
-                        .watermark { position: fixed; top: 35%; left: 20%; width: 60%; opacity: 0.08; z-index: -1; text-align: center; }
+                        body { font-family: 'Courier New', Courier, monospace; font-size: 10pt; color: #111; margin: 1.5cm; background-color: #fff; }
+                        .watermark { position: fixed; top: 30%; left: 25%; width: 50%; opacity: 0.07; z-index: -1; text-align: center; }
                         .watermark img { width: 100%; height: auto; }
-                        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+                        .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
                         .header h2, .header h4 { margin: 2px; text-transform: uppercase; font-weight: bold; }
-                        .section-title { font-weight: bold; text-transform: uppercase; border-bottom: 1px dashed #000; margin-top: 20px; margin-bottom: 10px; font-size: 12pt; }
-                        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10pt; }
-                        th, td { border: 1px solid #000; padding: 6px; text-align: left; }
+                        .section-title { font-weight: bold; text-transform: uppercase; border-bottom: 1px dashed #000; margin-top: 15px; margin-bottom: 8px; font-size: 11pt; }
+                        table { width: 100%; border-collapse: collapse; margin-top: 5px; font-size: 9pt; }
+                        th, td { border: 1px solid #000; padding: 5px; text-align: left; vertical-align: top; }
                         th { background-color: #eaeaea; text-transform: uppercase; }
-                        .signatures { margin-top: 50px; width: 100%; }
-                        .signatures td { border: none; text-align: center; width: 50%; padding-top: 40px; }
+                        .signatures { margin-top: 40px; width: 100%; page-break-inside: avoid; }
+                        .signatures td { border: none; text-align: center; width: 50%; padding-top: 30px; }
                     </style>
                 </head>
                 <body>
                     <div class="watermark"><img src="logo bianco.png" alt="Logo"></div>
                     <div class="header">
                         <h2>NUCLEO OPERATIVO EMERGENZA &bull; N.O.E. RIETI 210</h2>
-                        <h4>STATO DI SERVIZIO E RIEPILOGO TATTICO MENSILE</h4>
-                        <p style="font-size: 10pt; margin-top: 5px;">PERIODO DI RIFERIMENTO: <strong>${inputMonth}</strong> &bull; PROTOCOLLO INTERNO</p>
+                        <h4>RAPPORTO OPERATIVO E STATO DI SERVIZIO MENSILE</h4>
+                        <p style="font-size: 9pt; margin-top: 4px;">PERIODO: <strong>${inputMonth}</strong> &bull; REGISTRO UFFICIALE DI REPARTO</p>
                     </div>
 
-                    <div class="section-title">1. Riepilogo Operativo Generale</div>
-                    <p><strong>- Totale Servizi/Turni Conclusi:</strong> ${filteredShifts.length}</p>
-                    <p><strong>- Chilometraggio Totale Flotta:</strong> ${totalKm} KM</p>
-                    <p><strong>- Rifornimenti Carburante:</strong> ${filteredRefuels.length} registrazioni (Spesa Totale: &euro; ${totalFuelCost.toFixed(2)})</p>
+                    <div class="section-title">1. Riepilogo Tattico Generale</div>
+                    <p style="margin: 4px 0;"><strong>- Totale Servizi/Turni Conclusi:</strong> ${filteredShifts.length}</p>
+                    <p style="margin: 4px 0;"><strong>- Chilometraggio Totale Flotta:</strong> ${totalKm} KM</p>
+                    <p style="margin: 4px 0;"><strong>- Rifornimenti Carburante:</strong> ${filteredRefuels.length} registrazioni (Spesa Totale: &euro; ${totalFuelCost.toFixed(2)})</p>
 
-                    <div class="section-title">2. Registro Dettagliato Attività Svolte</div>
+                    <div class="section-title">2. Registro Dettagliato Attività e Servizi Svolti</div>
                     <table>
                         <thead>
                             <tr>
-                                <th>Data</th>
-                                <th>Tipologia Servizio</th>
-                                <th>Mezzo</th>
-                                <th>KM</th>
-                                <th>Squadra & Note</th>
+                                <th style="width: 25%;">Data / Orario</th>
+                                <th style="width: 25%;">Tipologia Servizio</th>
+                                <th style="width: 15%;">Mezzo & KM</th>
+                                <th style="width: 35%;">Squadra & Note Operative</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${filteredShifts.length === 0 ? '<tr><td colspan="5" style="text-align:center;"><em>Nessuna attività registrata nel periodo.</em></td></tr>' :
+                            ${filteredShifts.length === 0 ? '<tr><td colspan="4" style="text-align:center;"><em>Nessuna attività registrata in questo periodo.</em></td></tr>' :
                             filteredShifts.map(s => `
                                 <tr>
-                                    <td>${s.data} (${s.oraInizio}-${s.oraFine})</td>
+                                    <td>${s.data}<br>${s.oraInizio} - ${s.oraFine}</td>
                                     <td><strong>${s.tipoServizio}</strong></td>
-                                    <td>${s.mezzoUsato || 'Nessuno'}</td>
-                                    <td>${s.kmPercorsi || 0} km</td>
+                                    <td>${s.mezzoUsato || 'Nessuno'}<br>(${s.kmPercorsi || 0} km)</td>
                                     <td>Squadra: ${(s.volontariDettaglio || []).map(v => v.nome).join(', ')}<br><em>Note: ${s.note || 'Nessuna'}</em></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+
+                    <div class="section-title">3. Comunicati e Note Ufficiali (Bacheca di Reparto)</div>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th style="width: 20%;">Data / Autore</th>
+                                <th style="width: 30%;">Titolo Comunicato</th>
+                                <th style="width: 50%;">Testo Ufficiale</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${filteredAnnouncements.length === 0 ? '<tr><td colspan="3" style="text-align:center;"><em>Nessun comunicato ufficiale registrato in questo periodo.</em></td></tr>' :
+                            filteredAnnouncements.map(a => `
+                                <tr>
+                                    <td>${a.data}<br><strong>${a.autore}</strong></td>
+                                    <td>${a.titolo}</td>
+                                    <td>${a.testo}</td>
                                 </tr>
                             `).join('')}
                         </tbody>
