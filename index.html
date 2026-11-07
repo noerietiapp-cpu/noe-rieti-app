@@ -447,7 +447,7 @@
         }
         window.deleteAnnouncement = async function(id) { await deleteDoc(doc(db, "announcements", id)); invalidateCache('announcements'); loadCloudData(); }
 // --------------------------------------------------
-        // PARTE 6: GESTIONE TURNI DI SERVIZIO (CON NOTE ALLA CHIUSURA)
+        // PARTE 6: GESTIONE TURNI (INSERIMENTO MANUALE KM INIZIALI E FINALI)
         // --------------------------------------------------
         window.renderTurni = function() {
             const isAdmin = isSuperAdmin();
@@ -456,7 +456,7 @@
                     <div>
                         <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="fw-bold text-primary mb-0">${s.tipoServizio}</h5><span class="badge bg-success">In Corso</span></div>
                         <p class="mb-1"><strong>Data / Ora:</strong> ${s.data} - ${s.oraInizio}</p>
-                        <p class="mb-1"><strong>Mezzo:</strong> ${s.mezzoUsato || 'Nessuno'}</p>
+                        <p class="mb-1"><strong>Mezzo:</strong> ${s.mezzoUsato || 'Nessuno'} | <strong>KM Iniziali:</strong> ${s.kmInizialiMezzo !== undefined ? s.kmInizialiMezzo : 0}</p>
                         <ul class="list-unstyled small mt-2">${(s.volontariDettaglio || []).map(v => `<li><strong>${v.nome}:</strong> ${v.ruoloOperativo}</li>`).join('')}</ul>
                     </div>
                     <div>
@@ -488,6 +488,7 @@
                     <form onsubmit="addShift(event)">
                         <div class="row"><div class="col-md-6 mb-3"><label>Servizio*</label><select id="shiftTipo" class="form-select" required>${optionsTipologia}</select></div><div class="col-md-6 mb-3"><label>Data*</label><input type="date" id="shiftData" class="form-control" required></div></div>
                         <div class="row"><div class="col-md-4 mb-3"><label>Inizio*</label><input type="time" id="shiftOraInizio" class="form-control" required></div><div class="col-md-4 mb-3"><label>Fine Presunta*</label><input type="time" id="shiftOraFine" class="form-control" required></div><div class="col-md-4 mb-3"><label>Mezzo</label><select id="shiftMezzo" class="form-select">${optionsMezzi}</select></div></div>
+                        <div class="mb-3"><label class="fw-bold">KM Iniziali del Mezzo (Inserimento Manuale)*</label><input type="number" id="shiftKmIniziali" class="form-control" value="0" required></div>
                         <div class="mb-3"><label class="fw-bold">Volontari e Ruoli:*</label><div class="p-3 border rounded bg-light" style="max-height: 250px; overflow-y: auto;">${usersChecklistHTML}</div></div>
                         <button type="submit" class="btn btn-success fw-bold">Apri Turno</button>
                     </form>
@@ -522,11 +523,13 @@
                 vehicleObj = vehicles.find(v => v.id === mezzoId);
                 if (vehicleObj) mezzoStr = `${vehicleObj.modello} (${vehicleObj.targa})`;
             }
+            const kmInizialiManuali = parseInt(document.getElementById('shiftKmIniziali').value, 10) || 0;
+
             try {
                 await addDoc(collection(db, "shifts"), {
                     tipoServizio: document.getElementById('shiftTipo').value, data: document.getElementById('shiftData').value,
                     oraInizio: document.getElementById('shiftOraInizio').value, oraFine: document.getElementById('shiftOraFine').value,
-                    mezzoId: mezzoId, mezzoUsato: mezzoStr, kmInizialiMezzo: vehicleObj ? vehicleObj.km : 0, volontariDettaglio: selectedVols
+                    mezzoId: mezzoId, mezzoUsato: mezzoStr, kmInizialiMezzo: kmInizialiManuali, volontariDettaglio: selectedVols
                 });
                 alert("Turno aperto!"); loadCloudData();
             } catch (err) {}
@@ -536,28 +539,43 @@
             const shiftToClose = shifts[index];
             const oraFineReale = prompt("Ora fine effettiva (HH:MM):", shiftToClose.oraFine) || shiftToClose.oraFine;
             const noteServizio = prompt("Inserisci note o esito dell'intervento:", "Nessuna nota") || "Nessuna nota";
-            let kmPercorsi = 0, kmFinali = 0;
+            
+            // Inserimento manuale KM finali e calcolo automatico dei KM percorsi
+            const kmIniziali = shiftToClose.kmInizialiMezzo !== undefined ? shiftToClose.kmInizialiMezzo : 0;
+            const kmFinaliInput = prompt(`Inserisci i KM finali del mezzo (KM iniziali registrati: ${kmIniziali}):`, kmIniziali);
+            if (kmFinaliInput === null) return; // Annullato
+
+            const kmFinali = parseInt(kmFinaliInput, 10) || kmIniziali;
+            const kmPercorsi = Math.max(0, kmFinali - kmIniziali);
+
+            // Aggiorna anche il km del mezzo se è stato selezionato un veicolo specifico
             if (shiftToClose.mezzoId && shiftToClose.mezzoId !== "Nessun Mezzo") {
                 const currentVehicle = vehicles.find(v => v.id === shiftToClose.mezzoId);
-                const kmAttuali = currentVehicle ? currentVehicle.km : (shiftToClose.kmInizialiMezzo || 0);
-                const kmFinaliInput = prompt(`KM finali mezzo (Attuali: ${kmAttuali}):`, kmAttuali);
-                if (kmFinaliInput !== null) {
-                    kmFinali = parseInt(kmFinaliInput, 10) || kmAttuali;
-                    kmPercorsi = kmFinali - kmAttuali;
-                    if (currentVehicle) { await updateDoc(doc(db, "vehicles", currentVehicle.id), { km: kmFinali }); invalidateCache('vehicles'); }
+                if (currentVehicle) { 
+                    await updateDoc(doc(db, "vehicles", currentVehicle.id), { km: kmFinali }); 
+                    invalidateCache('vehicles'); 
                 }
-            } else { kmPercorsi = parseInt(prompt("KM percorsi:", "0"), 10) || 0; }
+            }
 
             try {
-                await addDoc(collection(db, "historyShifts"), { ...shiftToClose, oraFine: oraFineReale, note: noteServizio, kmFinaliMezzo: kmFinali, kmPercorsi: kmPercorsi, dataChiusura: new Date().toLocaleDateString('it-IT') });
+                await addDoc(collection(db, "historyShifts"), { 
+                    ...shiftToClose, 
+                    oraFine: oraFineReale, 
+                    note: noteServizio, 
+                    kmInizialiMezzo: kmIniziali,
+                    kmFinaliMezzo: kmFinali, 
+                    kmPercorsi: kmPercorsi, 
+                    dataChiusura: new Date().toLocaleDateString('it-IT') 
+                });
                 await deleteDoc(doc(db, "shifts", shiftId));
-                alert("Servizio chiuso e storico aggiornato!"); loadCloudData();
+                alert(`Servizio chiuso con successo! KM percorsi calcolati: ${kmPercorsi} km.`); 
+                loadCloudData();
             } catch (e) {}
         }
 
         window.deleteActiveShift = async function(shiftId) { if (confirm("Eliminare turno?")) { await deleteDoc(doc(db, "shifts", shiftId)); loadCloudData(); } }
 // --------------------------------------------------
-        // PARTE 7: DISPONIBILITÀ E STORICO SERVIZI (ORDINATO DAL PIU VECCHIO AL PIU NUOVO)
+        // PARTE 7: DISPONIBILITÀ E STORICO SERVIZI
         // --------------------------------------------------
         window.renderDisponibilita = function() {
             const isAdmin = isSuperAdmin();
@@ -602,7 +620,8 @@
                         <div class="d-flex justify-content-between align-items-center mb-2"><h5 class="fw-bold text-secondary mb-0">${s.tipoServizio}</h5><span class="badge bg-secondary">Concluso</span></div>
                         <p class="mb-1"><strong>Data Servizio:</strong> ${s.data} (Chiuso il: ${s.dataChiusura || 'N/D'})</p>
                         <p class="mb-1"><strong>Orario effettivo:</strong> ${s.oraInizio} - ${s.oraFine}</p>
-                        <p class="mb-1"><strong>Mezzo impiegato:</strong> ${s.mezzoUsato || 'Nessuno'} | <strong>KM percorsi:</strong> ${s.kmPercorsi || 0} km</p>
+                        <p class="mb-1"><strong>Mezzo impiegato:</strong> ${s.mezzoUsato || 'Nessuno'}</p>
+                        <p class="mb-1"><strong>KM Iniziali:</strong> ${s.kmInizialiMezzo !== undefined ? s.kmInizialiMezzo : 0} | <strong>KM Finali:</strong> ${s.kmFinaliMezzo !== undefined ? s.kmFinaliMezzo : 0} | <strong>Percorsi:</strong> ${s.kmPercorsi || 0} km</p>
                         <p class="mb-1"><strong>Note:</strong> ${s.note || 'Nessuna'}</p>
                         <hr class="my-2">
                         <strong>Squadra Impiegata:</strong>
@@ -622,11 +641,15 @@
         window.editHistoryShift = async function(id) {
             const s = historyShifts.find(item => item.id === id);
             if (!s) return;
-            const newKm = prompt("Modifica KM percorsi:", s.kmPercorsi || 0);
+            const newKmIniz = prompt("Modifica KM Iniziali:", s.kmInizialiMezzo || 0);
+            const newKmFin = prompt("Modifica KM Finali:", s.kmFinaliMezzo || 0);
             const newNote = prompt("Modifica note servizio:", s.note || "");
-            if (newKm !== null) {
+            if (newKmIniz !== null && newKmFin !== null) {
+                const ini = parseInt(newKmIniz, 10) || 0;
+                const fin = parseInt(newKmFin, 10) || 0;
+                const perc = Math.max(0, fin - ini);
                 try {
-                    await updateDoc(doc(db, "historyShifts", id), { kmPercorsi: parseInt(newKm, 10) || s.kmPercorsi, note: newNote });
+                    await updateDoc(doc(db, "historyShifts", id), { kmInizialiMezzo: ini, kmFinaliMezzo: fin, kmPercorsi: perc, note: newNote });
                     alert("Storico aggiornato con successo!"); loadCloudData();
                 } catch (e) {}
             }
@@ -724,7 +747,7 @@
 
         window.deleteRefuel = async function(id) { if (confirm("Eliminare?")) { await deleteDoc(doc(db, "refuels", id)); invalidateCache('refuels'); loadCloudData(); } }
 // --------------------------------------------------
-        // PARTE 9: PUNTI GPS E ARCHIVIO REPORT RIPRISTINATO
+        // PARTE 9: PUNTI GPS E ARCHIVIO REPORT
         // --------------------------------------------------
         window.renderLuoghi = function() {
             const isAdmin = isSuperAdmin();
@@ -856,7 +879,7 @@
             reader.readAsDataURL(f);
         }
 // --------------------------------------------------
-        // PARTE 10: FEEDBACK, REPORT MILITARE CON FILIGRANA E CHIUSURA SCRIPT
+        // PARTE 10: FEEDBACK, REPORT MILITARE E CHIUSURA SCRIPT
         // --------------------------------------------------
         window.checkMonthlyFeedback = async function() {
             if (!loggedUser || isManagerRole()) return false;
@@ -900,97 +923,7 @@
             document.getElementById('appContainer').innerHTML = `<button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button><h4>Dashboard Feedback</h4><div class="row">${html}</div>`;
         }
 
-// --------------------------------------------------
-        // PARTE 10: FEEDBACK, REPORT MILITARE DETTAGLIATO E CHIUSURA SCRIPT
-        // --------------------------------------------------
-        window.checkMonthlyFeedback = async function() {
-            if (!loggedUser || isManagerRole()) return false;
-            const today = new Date();
-            if (today.getDate() >= 15 && today.getDate() <= 20) {
-                const cur = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-                try {
-                    const snap = await getDocs(collection(db, "monthlyFeedbacks"));
-                    if (!snap.docs.some(d => d.data().userEmail === loggedUser.email && d.data().periodo === cur)) {
-                        renderFeedbackModal(cur); return true;
-                    }
-                } catch (e) {}
-            }
-            return false;
-        }
-
-        window.renderFeedbackModal = function(periodo) {
-            document.getElementById('appContainer').innerHTML = `
-                <div class="row justify-content-center"><div class="col-md-7"><div class="card p-4 border-danger shadow-lg text-center">
-                    <h3 class="fw-bold text-primary">Valutazione PWA Mensile</h3>
-                    <form onsubmit="submitMonthlyFeedback(event, '${periodo}')">
-                        <div class="mb-3 text-start"><label>Voto (1-5)*</label><select id="fbVoto" class="form-select"><option value="5">5 - Ottima</option><option value="3">3 - Sufficiente</option><option value="1">1 - Scarsa</option></select></div>
-                        <div class="mb-3 text-start"><label>Cosa ti piace?*</label><textarea id="fbPiace" class="form-control" required></textarea></div>
-                        <div class="mb-3 text-start"><label>Migliorie:*</label><textarea id="fbMigliorie" class="form-control" required></textarea></div>
-                        <button type="submit" class="btn btn-pc w-100 fw-bold">Invia e sblocca app</button>
-                    </form>
-                </div></div></div>
-            `;
-        }
-
-        window.submitMonthlyFeedback = async function(e, periodo) {
-            e.preventDefault();
-            await addDoc(collection(db, "monthlyFeedbacks"), { periodo: periodo, voto: document.getElementById('fbVoto').value, cosaPiace: document.getElementById('fbPiace').value, migliorie: document.getElementById('fbMigliorie').value, dataInvio: new Date().toLocaleString('it-IT'), userEmail: loggedUser.email, userName: `${loggedUser.nome} ${loggedUser.cognome}` });
-            alert("Grazie! App sbloccata."); loadCloudData();
-        }
-
-        window.renderAdminFeedbackDashboard = async function() {
-            if (!isAppCreator()) return;
-            const snap = await getDocs(collection(db, "monthlyFeedbacks"));
-            let html = snap.docs.map(d => { let f = d.data(); return `<div class="col-md-6 mb-3"><div class="card p-3"><h5>${f.userName} (${f.periodo})</h5><p>Voto: ${f.voto}</p><p>${f.migliorie}</p></div></div>`; }).join('');
-            document.getElementById('appContainer').innerHTML = `<button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button><h4>Dashboard Feedback</h4><div class="row">${html}</div>`;
-        }
-
-       // --------------------------------------------------
-        // PARTE 10: FEEDBACK, REPORT MILITARE CON FILIGRANA INCORPORATA E CHIUSURA SCRIPT
-        // --------------------------------------------------
-        window.checkMonthlyFeedback = async function() {
-            if (!loggedUser || isManagerRole()) return false;
-            const today = new Date();
-            if (today.getDate() >= 15 && today.getDate() <= 20) {
-                const cur = `${String(today.getMonth() + 1).padStart(2, '0')}/${today.getFullYear()}`;
-                try {
-                    const snap = await getDocs(collection(db, "monthlyFeedbacks"));
-                    if (!snap.docs.some(d => d.data().userEmail === loggedUser.email && d.data().periodo === cur)) {
-                        renderFeedbackModal(cur); return true;
-                    }
-                } catch (e) {}
-            }
-            return false;
-        }
-
-        window.renderFeedbackModal = function(periodo) {
-            document.getElementById('appContainer').innerHTML = `
-                <div class="row justify-content-center"><div class="col-md-7"><div class="card p-4 border-danger shadow-lg text-center">
-                    <h3 class="fw-bold text-primary">Valutazione PWA Mensile</h3>
-                    <form onsubmit="submitMonthlyFeedback(event, '${periodo}')">
-                        <div class="mb-3 text-start"><label>Voto (1-5)*</label><select id="fbVoto" class="form-select"><option value="5">5 - Ottima</option><option value="3">3 - Sufficiente</option><option value="1">1 - Scarsa</option></select></div>
-                        <div class="mb-3 text-start"><label>Cosa ti piace?*</label><textarea id="fbPiace" class="form-control" required></textarea></div>
-                        <div class="mb-3 text-start"><label>Migliorie:*</label><textarea id="fbMigliorie" class="form-control" required></textarea></div>
-                        <button type="submit" class="btn btn-pc w-100 fw-bold">Invia e sblocca app</button>
-                    </form>
-                </div></div></div>
-            `;
-        }
-
-        window.submitMonthlyFeedback = async function(e, periodo) {
-            e.preventDefault();
-            await addDoc(collection(db, "monthlyFeedbacks"), { periodo: periodo, voto: document.getElementById('fbVoto').value, cosaPiace: document.getElementById('fbPiace').value, migliorie: document.getElementById('fbMigliorie').value, dataInvio: new Date().toLocaleString('it-IT'), userEmail: loggedUser.email, userName: `${loggedUser.nome} ${loggedUser.cognome}` });
-            alert("Grazie! App sbloccata."); loadCloudData();
-        }
-
-        window.renderAdminFeedbackDashboard = async function() {
-            if (!isAppCreator()) return;
-            const snap = await getDocs(collection(db, "monthlyFeedbacks"));
-            let html = snap.docs.map(d => { let f = d.data(); return `<div class="col-md-6 mb-3"><div class="card p-3"><h5>${f.userName} (${f.periodo})</h5><p>Voto: ${f.voto}</p><p>${f.migliorie}</p></div></div>`; }).join('');
-            document.getElementById('appContainer').innerHTML = `<button class="btn btn-outline-secondary btn-sm mb-3" onclick="switchTab('bacheca')">Indietro</button><h4>Dashboard Feedback</h4><div class="row">${html}</div>`;
-        }
-
-        // --- GENERAZIONE REPORT STILE MILITARE (CON FILIGRANA LOGO INCORPORATA E DATI DETTAGLIATI) ---
+        // --- GENERAZIONE REPORT STILE MILITARE (CON FILIGRANA E RIEPILOGO DETTAGLIATO) ---
         window.downloadWordReport = function() {
             const today = new Date();
             const defaultMonth = String(today.getMonth() + 1).padStart(2, '0') + '/' + today.getFullYear();
@@ -1041,10 +974,6 @@
                 </tr>
             `).join('');
 
-            // Logo ufficiale incorporato direttamente in Base64 (Filigrana)
-            const base64Logo = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="; 
-            // Nota: qui sopra c'è un segnaposto leggero, ma nel codice reale useremo l'immagine completa incorporata.
-
             let printWindow = window.open('', '_blank');
             printWindow.document.write(`
                 <html>
@@ -1053,7 +982,7 @@
                     <title>STATO DI SERVIZIO - N.O.E. RIETI 210</title>
                     <style>
                         body { font-family: 'Courier New', Courier, monospace; font-size: 10pt; color: #111; margin: 1.5cm; background-color: #fff; position: relative; }
-                        .watermark { position: fixed; top: 25%; left: 20%; width: 60%; opacity: 0.07; z-index: -1; text-align: center; pointer-events: none; }
+                        .watermark { position: fixed; top: 25%; left: 20%; width: 60%; opacity: 0.08; z-index: -1; text-align: center; pointer-events: none; }
                         .watermark img { width: 100%; height: auto; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
                         .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 15px; }
                         .header h2, .header h4 { margin: 2px; text-transform: uppercase; font-weight: bold; }
@@ -1065,12 +994,12 @@
                         .signatures td { border: none; text-align: center; width: 50%; padding-top: 30px; }
                         @media print {
                             body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-                            .watermark { opacity: 0.07 !important; }
+                            .watermark { opacity: 0.08 !important; }
                         }
                     </style>
                 </head>
                 <body>
-                    <div class="watermark"><img src="${document.querySelector('.logo-noe-header')?.src || 'logo%20bianco.png'}" alt="Filigrana NOE"></div>
+                    <div class="watermark"><img src="logo bianco.png" alt="Filigrana NOE" onerror="this.style.display='none'"></div>
                     <div class="header">
                         <h2>NUCLEO OPERATIVO EMERGENZA &bull; N.O.E. RIETI 210</h2>
                         <h4>RAPPORTO OPERATIVO E STATO DI SERVIZIO MENSILE</h4>
@@ -1095,8 +1024,8 @@
                         <tbody>
                             ${filteredShifts.length === 0 ? '<tr><td colspan="4" style="text-align:center;"><em>Nessuna attività registrata in questo periodo.</em></td></tr>' :
                             filteredShifts.map(s => {
-                                const kmIniz = s.kmInizialiMezzo !== undefined ? s.kmInizialiMezzo : '-';
-                                const kmFin = s.kmFinaliMezzo !== undefined && s.kmFinaliMezzo !== 0 ? s.kmFinaliMezzo : '-';
+                                const kmIniz = s.kmInizialiMezzo !== undefined ? s.kmInizialiMezzo : 0;
+                                const kmFin = s.kmFinaliMezzo !== undefined ? s.kmFinaliMezzo : 0;
                                 const kmPerc = s.kmPercorsi || 0;
                                 return `
                                 <tr>
